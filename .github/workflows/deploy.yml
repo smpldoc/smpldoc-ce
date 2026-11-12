@@ -1,0 +1,35 @@
+name: "_auto:deploy"
+
+# Runs on pull requests and on pushes to main. Read-only, no secrets.
+# When the first container image exists, this workflow also gains the steps that
+# build it, scan it, and (on a version tag) sign and publish it. Until then it
+# only runs the repository checks.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Check tests
+        run: python -B -m unittest discover -s scripts
+      - name: Repository rules (pins, permissions, secrets)
+        run: python scripts/check_repo.py

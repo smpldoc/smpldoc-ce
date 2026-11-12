@@ -1,0 +1,13 @@
+# Routine version updates arrive once a month, grouped, so main changes
+# slowly. Security updates are separate and arrive as soon as they're published
+# (enable Dependabot security updates in the repository settings).
+# Add an entry here for each ecosystem as it appears (npm, pip, docker, terraform).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
