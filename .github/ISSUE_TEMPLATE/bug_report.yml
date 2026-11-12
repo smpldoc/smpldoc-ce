@@ -1,0 +1,40 @@
+name: Bug report
+description: Something isn't working as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please don't report security vulnerabilities here. See SECURITY.md.
+        Remove any email content, documents, keys, or personal data before posting.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "Where it runs (Docker Compose, AWS service), and which adapters are on"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output, with any email addresses, document text and keys removed.
+      render: text
