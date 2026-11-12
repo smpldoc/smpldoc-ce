@@ -2,7 +2,7 @@
 
 The public Community Edition of smpldoc: a self-hosted service that reads emailed documents,
 extracts field values and routes each job. It runs in the operator's own cloud account.
-**Status: design stage. No application code exists yet.**
+**Status: design stage. Only the ports, the job rules and reference adapters exist (`app/`).**
 
 Facts, wording and decisions live in the private standards repo and arrive here as `reference/`
 through an automated "Update reference data" pull request. Never edit `reference/` by hand.
@@ -28,6 +28,7 @@ through an automated "Update reference data" pull request. Never edit `reference
 ```bash
 python -B -m unittest discover -s scripts
 python scripts/check_repo.py
+cd app && npm test   # Node 22.18 or newer; no install step, there are no dependencies
 ```
 
 ## Where things go
