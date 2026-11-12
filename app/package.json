@@ -1,0 +1,11 @@
+{
+  "name": "smpldoc-ce",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "smpldoc Community Edition. Design stage: ports, domain rules and reference adapters.",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  }
+}

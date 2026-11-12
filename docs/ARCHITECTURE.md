@@ -1,6 +1,7 @@
 # Architecture
 
-**Status: design.** Nothing here is built yet. This page is the plan that the first code is
+**Status: design, with the first code started.** The ports, the job workflow rules and reference
+adapters exist (see `app/`). Everything else here is still plan. This page is what the code is
 written against, with tests first.
 
 ## The shape

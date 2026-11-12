@@ -21,7 +21,11 @@ Run both before you push. CI runs the same checks.
 ```bash
 python -B -m unittest discover -s scripts
 python scripts/check_repo.py
+cd app && npm test
 ```
+
+`npm test` needs Node 22.18 or newer. There is nothing to install: the code has no dependencies
+and Node runs the TypeScript directly.
 
 ## Rules this project holds itself to
 
