@@ -1,0 +1,28 @@
+# Local trial: one container, one volume. Open http://127.0.0.1:3787 and sign in with the
+# password you set in SMPLDOC_ADMIN_TOKEN (any user name).
+services:
+  smpldoc:
+    image: "${SMPLDOC_IMAGE:-smpldoc-ce:local}"
+    build: ./app
+    environment:
+      SMPLDOC_ADMIN_TOKEN: "${SMPLDOC_ADMIN_TOKEN:?Set SMPLDOC_ADMIN_TOKEN to a password of at least 12 characters}"
+      SMPLDOC_COMPANY: "${SMPLDOC_COMPANY:-default}"
+      SMPLDOC_FIELDS: "${SMPLDOC_FIELDS:-invoice_number,total,due_date}"
+      # Local trial: mail you drop into the inbox yourself is trusted. For real mail use "ses".
+      SMPLDOC_INBOX_TRUST: "${SMPLDOC_INBOX_TRUST:-all}"
+      SMPLDOC_POLL_SECONDS: "${SMPLDOC_POLL_SECONDS:-5}"
+    ports:
+      - "127.0.0.1:3787:3787"
+    volumes:
+      - smpldoc-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+volumes:
+  smpldoc-data:

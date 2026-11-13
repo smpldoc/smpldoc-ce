@@ -75,6 +75,9 @@ See [SECURITY.md](../SECURITY.md).
 
 ## Build order (tests first)
 
+Done: 1 to 3 and 6 to 8 (steps 6 to 8 cover the domain boundary check, the container and a local
+end-to-end check). Next: 4 (`s3-inbox` over an S3 `BlobStore`), then 9.
+
 1. Shared contract tests for each port.
 2. Runner behaviour: retries, resume after a crash, waiting for a person.
 3. The runner must reproduce the exact step-event sequence for every pipeline path.

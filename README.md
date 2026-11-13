@@ -6,9 +6,30 @@ routes the job to where it should go.
 It is a **self-hosted** service. It runs in your own cloud account, and your documents never reach
 us.
 
-> **Status: design stage.** There is no release and nothing to run yet. This repository holds the
-> design, the security rules and the checks that every future change must pass. Watch or star the
-> repository to follow progress.
+> **Status: early build, not released.** The pipeline runs end to end in one container on your
+> machine: it reads mail from an inbox folder, makes a job, extracts values from plain-text
+> documents, and serves a password-protected portal. S3 and SES, a real AI service, PDF reading
+> and a signed release are not built yet. Nothing here is ready for production mail.
+
+## Try it locally
+
+Needs Docker with Compose v2.
+
+```bash
+git clone https://github.com/smpldoc/smpldoc-ce.git
+cd smpldoc-ce
+SMPLDOC_ADMIN_TOKEN='choose-a-long-password' docker compose up -d --build
+```
+
+Open <http://127.0.0.1:3787> and sign in with any user name and that password. Drop a raw email
+(`.eml`) into the inbox folder inside the volume:
+
+```bash
+docker compose exec -T smpldoc sh -c 'mkdir -p /data/blob/inbox && cat > /data/blob/inbox/first' < message.eml
+```
+
+It becomes a job within a few seconds. Plain-text lines such as `invoice_number: 1042` are read as
+values. Run `./scripts/smoke-local.sh` to check the whole path automatically.
 
 ## What it will be
 
