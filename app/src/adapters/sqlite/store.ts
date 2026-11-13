@@ -151,13 +151,15 @@ export function createSqliteStore(path: string, clock: Clock): SqliteHandle {
       const rows = (filter?.status ? q.listStatus.all(companyId, filter.status) : q.listAll.all(companyId)) as unknown as JobRow[];
       return rows.map(toJob);
     },
-    async advance(companyId, jobId, to) {
+    async advance(companyId, jobId, to, note = "") {
       return inTransaction(() => {
         const row = findRow(companyId, jobId);
+        const problem = checkNote(note);
+        if (problem) throw new InvalidInputError(problem);
         if (!canAdvance(row.status, to)) {
           throw new InvalidTransitionError(`the pipeline cannot move ${row.status} to ${to}`, row.status, allowedActions(row.status));
         }
-        return move(row, to, "pipeline", "advance", "");
+        return move(row, to, "pipeline", "advance", note);
       });
     },
     async applyAction(companyId, jobId, action: JobAction, actor, note = "") {

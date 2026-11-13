@@ -67,12 +67,14 @@ export function createMemoryStore(clock: Clock): Store {
         .sort((a, b) => Date.parse(b.job.createdAt) - Date.parse(a.job.createdAt) || Number(b.job.id.slice(4)) - Number(a.job.id.slice(4)))
         .map((r) => structuredClone(r.job));
     },
-    async advance(companyId, jobId, to) {
+    async advance(companyId, jobId, to, note = "") {
       const record = find(companyId, jobId);
+      const problem = checkNote(note);
+      if (problem) throw new InvalidInputError(problem);
       if (!canAdvance(record.job.status, to)) {
         throw new InvalidTransitionError(`the pipeline cannot move ${record.job.status} to ${to}`, record.job.status, allowedActions(record.job.status));
       }
-      move(record, to, "pipeline", "advance", "");
+      move(record, to, "pipeline", "advance", note);
       return structuredClone(record.job);
     },
     async applyAction(companyId, jobId, action, actor, note = "") {

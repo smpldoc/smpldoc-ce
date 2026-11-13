@@ -19,6 +19,19 @@ export function storeContract(name: string, make: (clock: Clock) => Promise<Stor
       return (await make(fakeClock())).store;
     }
 
+    describe("pipeline notes", () => {
+      it("records the note given when the pipeline moves a job, and refuses an oversized one", async () => {
+        const store = await fresh();
+        const { job } = await store.createJob(A, { messageId: "<n1@x>" });
+        await store.advance(A, job.id, "processing");
+        await store.advance(A, job.id, "failed", "extractor down");
+        assert.equal((await store.history(A, job.id)).at(-1)?.note, "extractor down");
+        const other = await store.createJob(A, { messageId: "<n2@x>" });
+        await assert.rejects(store.advance(A, other.job.id, "processing", "n".repeat(501)), InvalidInputError);
+        assert.equal((await store.getJob(A, other.job.id))?.status, "received");
+      });
+    });
+
     describe("creating jobs", () => {
       it("starts a job as received, with one history entry", async () => {
         const store = await fresh();

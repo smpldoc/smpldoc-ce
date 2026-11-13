@@ -54,8 +54,8 @@ export interface Store {
   getJob(companyId: string, jobId: string): Promise<Job | null>;
   /** This company's jobs, newest first. */
   listJobs(companyId: string, filter?: { status?: JobStatus }): Promise<Job[]>;
-  /** A move made by the pipeline. Throws InvalidTransitionError when it is not allowed. */
-  advance(companyId: string, jobId: string, to: JobStatus): Promise<Job>;
+  /** A move made by the pipeline, with an optional note such as why a job failed. Throws InvalidTransitionError when it is not allowed. */
+  advance(companyId: string, jobId: string, to: JobStatus, note?: string): Promise<Job>;
   /** A move made by a person. Throws InvalidTransitionError and changes nothing when not allowed. */
   applyAction(companyId: string, jobId: string, action: JobAction, actor: string, note?: string): Promise<Job>;
   /** Every change to the job, in order. */
