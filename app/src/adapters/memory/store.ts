@@ -2,14 +2,9 @@
 // come from the domain, so a database adapter can reuse them.
 import { allowedActions, canAdvance, isJobAction, statusAfterAction } from "../../domain/workflow.ts";
 import type { JobStatus } from "../../domain/workflow.ts";
+import { checkActor, checkCompany, checkFieldValue, checkNewJob, checkNote, resolveFieldValues } from "../../domain/rules.ts";
 import type { Clock, FieldValue, HistoryEntry, Job, Store } from "../../ports/store.ts";
 import { CompanyRequiredError, InvalidInputError, InvalidTransitionError, JobNotFoundError } from "../../ports/store.ts";
-
-const MAX_MESSAGE_ID = 998;
-const MAX_SUBJECT = 1000;
-const MAX_NOTE = 500;
-const MAX_FIELD_NAME = 200;
-const MAX_FIELD_VALUE = 100_000;
 
 interface Record {
   job: Job;
@@ -23,7 +18,7 @@ export function createMemoryStore(clock: Clock): Store {
   let counter = 0;
 
   function requireCompany(companyId: string): void {
-    if (typeof companyId !== "string" || companyId.trim() === "") throw new CompanyRequiredError("a company is required");
+    if (checkCompany(companyId)) throw new CompanyRequiredError("a company is required");
   }
 
   function find(companyId: string, jobId: string): Record {
@@ -44,10 +39,8 @@ export function createMemoryStore(clock: Clock): Store {
     async createJob(companyId, input) {
       requireCompany(companyId);
       const subject = input.subject ?? "";
-      if (typeof input.messageId !== "string" || input.messageId === "" || input.messageId.length > MAX_MESSAGE_ID) {
-        throw new InvalidInputError("messageId must be 1 to 998 characters");
-      }
-      if (subject.length > MAX_SUBJECT) throw new InvalidInputError("subject is too long");
+      const problem = checkNewJob(input.messageId, subject);
+      if (problem) throw new InvalidInputError(problem);
       const key = `${companyId}\u0000${input.messageId}`;
       const existing = byMessage.get(key);
       if (existing) return { job: structuredClone(records.get(existing)!.job), created: false };
@@ -74,18 +67,20 @@ export function createMemoryStore(clock: Clock): Store {
         .sort((a, b) => Date.parse(b.job.createdAt) - Date.parse(a.job.createdAt) || Number(b.job.id.slice(4)) - Number(a.job.id.slice(4)))
         .map((r) => structuredClone(r.job));
     },
-    async advance(companyId, jobId, to) {
+    async advance(companyId, jobId, to, note = "") {
       const record = find(companyId, jobId);
+      const problem = checkNote(note);
+      if (problem) throw new InvalidInputError(problem);
       if (!canAdvance(record.job.status, to)) {
         throw new InvalidTransitionError(`the pipeline cannot move ${record.job.status} to ${to}`, record.job.status, allowedActions(record.job.status));
       }
-      move(record, to, "pipeline", "advance", "");
+      move(record, to, "pipeline", "advance", note);
       return structuredClone(record.job);
     },
     async applyAction(companyId, jobId, action, actor, note = "") {
       const record = find(companyId, jobId);
-      if (typeof actor !== "string" || actor.trim() === "") throw new InvalidInputError("actor is required");
-      if (note.length > MAX_NOTE) throw new InvalidInputError("note is too long");
+      const problem = checkActor(actor) ?? checkNote(note);
+      if (problem) throw new InvalidInputError(problem);
       const to = isJobAction(action) ? statusAfterAction(record.job.status, action) : null;
       if (to === null) {
         throw new InvalidTransitionError(`${String(action)} is not allowed from ${record.job.status}`, record.job.status, allowedActions(record.job.status));
@@ -98,19 +93,12 @@ export function createMemoryStore(clock: Clock): Store {
     },
     async addFieldValue(companyId, jobId, value) {
       const record = find(companyId, jobId);
-      if (typeof value.name !== "string" || value.name === "" || value.name.length > MAX_FIELD_NAME) throw new InvalidInputError("field name must be 1 to 200 characters");
-      if (typeof value.value !== "string" || value.value.length > MAX_FIELD_VALUE) throw new InvalidInputError("field value is too large");
-      if (value.source !== "derived" && value.source !== "correction") throw new InvalidInputError("source must be derived or correction");
+      const problem = checkFieldValue(value);
+      if (problem) throw new InvalidInputError(problem);
       record.values.push({ name: value.name, value: value.value, source: value.source, at: clock() });
     },
     async fieldValues(companyId, jobId) {
-      const { values } = find(companyId, jobId);
-      const names = [...new Set(values.map((v) => v.name))];
-      return names.map((name) => {
-        const own = values.filter((v) => v.name === name);
-        const corrections = own.filter((v) => v.source === "correction");
-        return structuredClone((corrections.length ? corrections : own).at(-1)!);
-      });
+      return structuredClone(resolveFieldValues(find(companyId, jobId).values));
     },
     async allFieldValues(companyId, jobId) {
       return structuredClone(find(companyId, jobId).values);

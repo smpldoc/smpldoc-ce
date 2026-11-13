@@ -8,6 +8,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A runnable container. SQLite `Store` (passes the shared Store contract, history is append-only
+  and survives a restart), a blob-folder `MailIn` that maps Amazon SES scan results to a sender
+  verdict (a forged duplicate header is never trusted), a dependency-free MIME reader with size
+  and nesting caps, the job pipeline (hold unverified senders, retries with backoff, crash resume,
+  no double values), a password-protected portal and JSON API, a hardened Dockerfile pinned by
+  digest, `docker-compose.yml` and `scripts/smoke-local.sh`, which CI runs on every pull request.
+- `Store.advance` takes an optional note, so a failed job records why.
+
 - Repository scaffold: license, security policy, contribution guide, code of conduct, issue and
   pull request templates, and Dependabot for GitHub Actions.
 - `scripts/check_repo.py` and its tests. It fails the build on an unpinned action or base image,

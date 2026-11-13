@@ -1,6 +1,6 @@
 # Dev environment
 
-- Needed now: **no**. There is no code to run yet; checks run in GitHub Actions (`_auto:deploy`).
+- Needed now: **local only.** `docker compose up` (see README) runs the whole app, and `_auto:deploy` runs the same smoke test in CI. No cloud environment yet.
 - Needed later: **yes, one thing.** The `aws-smoke` check (`_manual:ops`) needs a throwaway AWS
   account with SES in sandbox mode, one bucket and one small container. Everything else runs in
   Docker Compose.
