@@ -14,4 +14,11 @@ All notable changes to this project are documented here. The format follows
   a workflow without read-only permissions, `pull_request_target`, a download piped to a shell, or
   a committed secret.
 - `_auto:deploy` and `scorecard` workflows.
-- Architecture overview in `docs/ARCHITECTURE.md`. Nothing is built yet.
+- Architecture overview in `docs/ARCHITECTURE.md`.
+- Core: domain models, the five ports (`MailIn`, `Blob`, `Extractor`, `Store`) and the job runner
+  (ingest, extract, close) with retries, step events, crash resume, a sender trust gate and
+  company scoping.
+- Adapters: `relay-pull` mail (https only, bearer token, no redirects, size cap), in-memory mail,
+  SQLite store, file blob, plain-text extractor.
+- Shared contract tests for every port, a domain-boundary check, and a fake relay for tests.
+- `docs/RELAY_PROTOCOL.md` and `docs/FEATURES.md`.

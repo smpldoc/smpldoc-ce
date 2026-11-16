@@ -31,5 +31,7 @@ jobs:
           python-version: "3.12"
       - name: Check tests
         run: python -B -m unittest discover -s scripts
+      - name: Core tests
+        run: python -B -m unittest discover -s tests -t .
       - name: Repository rules (pins, permissions, secrets)
         run: python scripts/check_repo.py
