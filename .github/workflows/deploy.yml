@@ -35,3 +35,33 @@ jobs:
         run: python -B -m unittest discover -s tests -t .
       - name: Repository rules (pins, permissions, secrets)
         run: python scripts/check_repo.py
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the image
+        run: docker build -t smpldoc-ce:ci .
+      - name: Scan the image (high and critical, fixable only)
+        run: |
+          docker save smpldoc-ce:ci -o "$RUNNER_TEMP/image.tar"
+          docker run --rm -v "$RUNNER_TEMP/image.tar:/image.tar:ro" \
+            ghcr.io/aquasecurity/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --input /image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+      - name: Run it with the hardening flags and check it
+        run: |
+          docker run -d --name smpldoc --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 128 --memory 512m --tmpfs /tmp:size=16m,noexec,nosuid -v ci-data:/data \
+            -e SMPLDOC_RELAY_URL=http://127.0.0.1:9 -e SMPLDOC_RELAY_TOKEN=ci-token \
+            -p 127.0.0.1:8080:8080 smpldoc-ce:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8080/healthz | grep -q '"status": "ok"'
+          test "$(docker exec smpldoc id -u)" = "10001"
+          if docker exec smpldoc python -c "open('/app/x','w')" 2>/dev/null; then echo "root filesystem is writable"; exit 1; fi
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/nope)" = "404"
+          docker exec smpldoc python -m smpldoc add-company ci "CI Co"
+          docker logs smpldoc
+          docker rm -f smpldoc
