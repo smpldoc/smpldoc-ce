@@ -6,8 +6,9 @@ routes the job to where it should go.
 It is a **self-hosted** service. It runs in your own cloud account, and your documents never reach
 us.
 
-> **Status: design stage.** There is no release and nothing to run yet. This repository holds the
-> design, the security rules and the checks that every future change must pass. Watch or star the
+> **Status: first code, no release yet.** The core job runner, the relay mail adapter, a SQLite
+> store and a hardened container image exist and are tested. There is nothing to deploy for real
+> yet. See [docs/FEATURES.md](docs/FEATURES.md) for what is built and planned. Watch or star the
 > repository to follow progress.
 
 ## What it will be

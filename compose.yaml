@@ -1,0 +1,37 @@
+# Example: run smpldoc-ce on one machine with the container locked down.
+#   1. mkdir secrets && printf '%s' 'YOUR-RELAY-TOKEN' > secrets/relay_token
+#   2. export SMPLDOC_RELAY_URL=https://your-relay.example.com
+#   3. docker compose up -d --build
+#   4. docker compose run --rm smpldoc add-company acme "Acme Inc"
+# The port is published on 127.0.0.1 only. Change that only after sign-in exists.
+services:
+  smpldoc:
+    build: .
+    image: smpldoc-ce:local
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SMPLDOC_RELAY_URL: ${SMPLDOC_RELAY_URL:?set SMPLDOC_RELAY_URL to your relay's https address}
+      SMPLDOC_RELAY_TOKEN_FILE: /run/secrets/relay_token
+    secrets:
+      - relay_token
+    volumes:
+      - smpldoc-data:/data
+    restart: unless-stopped
+
+secrets:
+  relay_token:
+    file: ./secrets/relay_token
+
+volumes:
+  smpldoc-data:
