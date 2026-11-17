@@ -2,7 +2,8 @@
 
 The public Community Edition of smpldoc: a self-hosted service that reads emailed documents,
 extracts field values and routes each job. It runs in the operator's own cloud account.
-**Status: design stage. No application code exists yet.**
+**Status: first code (2026-11-16): runner, SQLite store, file blob, plain-text extractor, relay-pull
+mail. Python 3.12, standard library only. Features: `docs/FEATURES.md`.**
 
 Facts, wording and decisions live in the private standards repo and arrive here as `reference/`
 through an automated "Update reference data" pull request. Never edit `reference/` by hand.
@@ -27,6 +28,7 @@ through an automated "Update reference data" pull request. Never edit `reference
 
 ```bash
 python -B -m unittest discover -s scripts
+python -B -m unittest discover -s tests -t .
 python scripts/check_repo.py
 ```
 

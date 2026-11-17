@@ -11,8 +11,9 @@ Thanks for helping improve smpldoc Community Edition.
 
 ## Project status
 
-The project is at design stage. There is no application code yet, so the most useful
-contributions now are reviews of `docs/ARCHITECTURE.md` and `SECURITY.md`.
+The core runner and first adapters exist (standard library only, Python 3.12). The feature list is
+`docs/FEATURES.md`. Reviews of `docs/ARCHITECTURE.md`, `docs/RELAY_PROTOCOL.md` and `SECURITY.md`
+are especially welcome.
 
 ## Checks
 
@@ -20,6 +21,7 @@ Run both before you push. CI runs the same checks.
 
 ```bash
 python -B -m unittest discover -s scripts
+python -B -m unittest discover -s tests -t .
 python scripts/check_repo.py
 ```
 
