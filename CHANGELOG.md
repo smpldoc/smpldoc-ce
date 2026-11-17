@@ -22,3 +22,10 @@ All notable changes to this project are documented here. The format follows
   SQLite store, file blob, plain-text extractor.
 - Shared contract tests for every port, a domain-boundary check, and a fake relay for tests.
 - `docs/RELAY_PROTOCOL.md` and `docs/FEATURES.md`.
+- Entry point `python -m smpldoc` (`run`, `check-config`, `add-company`), environment-only config
+  with secret files and unknown-setting errors, and a closed health server.
+- Exposure safety: refuses a public bind when a protected route has no sign-in, probes protected
+  routes anonymously at start, protected routes fail closed.
+- Hardened `Dockerfile` (digest-pinned base, non-root, health check) and example `compose.yaml`
+  (read-only, no capabilities, loopback port, secret file). CI builds the image, scans it with
+  Trivy and smoke-tests it with the same hardening flags.

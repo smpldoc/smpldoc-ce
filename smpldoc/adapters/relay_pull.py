@@ -24,13 +24,17 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def validate_url(base_url):
+    u = urlparse(base_url)
+    if u.scheme != "https" and not (u.scheme == "http" and u.hostname in LOOPBACK):
+        raise ValueError("the relay URL must be https (plain http only on loopback)")
+
+
 class RelayPull:
     def __init__(self, base_url, token, *, timeout=30, max_bytes=25_000_000, lease_seconds=300):
-        u = urlparse(base_url)
         if not token:
             raise ValueError("a relay token is required")
-        if u.scheme != "https" and not (u.scheme == "http" and u.hostname in LOOPBACK):
-            raise ValueError("the relay URL must be https (plain http only on loopback)")
+        validate_url(base_url)
         self.base, self.token = base_url.rstrip("/"), token
         self.timeout, self.max_bytes, self.lease = timeout, max_bytes, lease_seconds
         self._opener = urllib.request.build_opener(_NoRedirect)
