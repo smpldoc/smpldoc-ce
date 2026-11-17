@@ -4,8 +4,9 @@ smpldoc handles other people's email and documents, so it is built to be easy to
 to misuse. This page says what it will never do, how to check a release, and how to report a
 problem.
 
-**Status: design stage.** There is no release yet. The promises below are the rules every change
-must meet, and the checks that enforce them are described under "How we enforce this".
+**Status: first code, no release yet.** The promises below are the rules every change must meet,
+and the checks that enforce them are described under "How we enforce this". The container image is
+built, scanned and smoke-tested on every pull request but not yet signed or published.
 
 ## What smpldoc will never do
 
@@ -40,6 +41,29 @@ Verify the signature before you run an image. If it fails, do not run it, and te
 - OpenSSF Scorecard runs weekly and its result is public.
 - Dependency updates arrive in small, reviewed pull requests. Security updates arrive as soon as
   they are published.
+
+## If it is exposed to the internet by mistake
+
+Assume someone will publish the port by accident. The design limits what that costs:
+
+- **Mail is pulled, never pushed.** There is no inbound mail port to attack.
+- **The only network surface today is `/healthz` and `/readyz`,** which return `{"status":"ok"}` and
+  nothing else: no version, no counts, no names.
+- **Closed by default.** The app binds `127.0.0.1` unless told otherwise. Any route that serves data
+  is *protected*, and a protected route answers 401 unless a sign-in check says yes. With no sign-in
+  configured it always answers 401.
+- **It refuses to start open.** If you bind a non-loopback address and any protected route has no
+  sign-in configured, the app exits (code 3) with a message instead of serving.
+- **It tests itself.** After starting, the app calls each protected route with no credentials and
+  exits if any answers. This catches a wiring mistake in a future release.
+- **Typos fail loudly.** An unknown `SMPLDOC_*` setting is an error, so a misspelt safe setting
+  never silently falls back.
+- **Secrets stay out of sight.** The relay token is read from a file (`SMPLDOC_RELAY_TOKEN_FILE`) or
+  the environment, is never logged or printed, and is sent only to the configured relay. Logs and
+  step events hold ids, counts and error class names, never document text.
+- **The container is locked down:** non-root user, read-only root filesystem, all Linux
+  capabilities dropped, no new privileges, memory and process limits, a private data directory
+  (mode 700), and the example compose file publishes the port on `127.0.0.1` only.
 
 ## Design limits you should know
 

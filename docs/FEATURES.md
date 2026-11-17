@@ -13,6 +13,11 @@ New features start as a row here, then an issue, then a failing test.
 | extract-plain-text | Read `Name: value` lines from text | built | `tests/test_adapters.py` | PDFs and images need a real extractor |
 | runner | ingest, extract, close with retries, step events, crash resume | built | `tests/test_runner.py` | |
 | trust-gate | Hold anything whose sender verdict is not `pass` | built | `tests/test_runner.py` | |
+| config | Settings from environment variables, secrets from files, typos are errors | built | `tests/test_config.py` | `CONFIG.md` |
+| entrypoint | `python -m smpldoc` with run, check-config and add-company | built | `tests/test_main.py` | |
+| health | `/healthz` and `/readyz` on a closed HTTP surface | built | `tests/test_http_exposure.py` | Public routes only |
+| exposure-check | Refuse an open bind with unprotected routes; probe protected routes at start | built | `tests/test_http_exposure.py`, `tests/test_main.py` | Protected routes arrive with the portal |
+| container | Hardened image and example compose file | building | `tests/test_container.py`, CI image job | Not yet signed or published |
 | mail-in-s3 | Read mail SES wrote to a bucket | planned | | AWS bring-your-own mail |
 | mail-in-imap | Read a mailbox | planned | | |
 | mail-out | Forward a finished job (SES or SMTP) | planned | | |
@@ -21,8 +26,7 @@ New features start as a row here, then an issue, then a failing test.
 | portal | Web UI for jobs | planned | | Closed by default, OIDC required to bind beyond loopback |
 | oidc | Sign-in through any OIDC provider | planned | | Recipes: Entra, Cognito, Okta, Clerk |
 | mcp | MCP server | planned | | Read only by default, same OIDC tokens |
-| container | Hardened, signed image | planned | | Non-root, read-only filesystem, digest-pinned base |
-| exposure-check | Startup check that refuses to serve unauthenticated | planned | | |
+| container-release | Sign, SBOM and publish the image on a version tag | planned | | cosign, CycloneDX |
 | deploy-aws | Deploy guide | planned | | First |
 | deploy-cloudflare | Deploy guide | planned | | |
 | deploy-azure | Deploy guide | planned | | Azure has no native inbound mail like SES: use the relay |

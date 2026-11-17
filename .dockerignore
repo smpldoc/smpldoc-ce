@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+.gitignore
+docs
+tests
+scripts
+secrets
+*.md
+compose.yaml
+Dockerfile
+**/__pycache__
+.data
+.env
+.env.*
