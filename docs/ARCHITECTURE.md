@@ -1,7 +1,8 @@
 # Architecture
 
-**Status: design.** Nothing here is built yet. This page is the plan that the first code is
-written against, with tests first.
+**Status: first code.** The core runner, the SQLite store, the file blob, a plain-text extractor and
+the relay-pull mail adapter exist, with tests. See [FEATURES.md](FEATURES.md) for what is built and
+planned, and [RELAY_PROTOCOL.md](RELAY_PROTOCOL.md) for the relay.
 
 ## The shape
 
@@ -36,7 +37,7 @@ same interfaces.
 
 | Port (interface) | Adapters planned |
 |---|---|
-| `MailIn`: a raw message appears, hand it over | `s3-inbox` (first), `imap` (second) |
+| `MailIn`: a raw message appears, hand it over | `relay-pull` (built), `s3-inbox`, `imap` |
 | `MailOut`: send a message | `ses-send`, `smtp` |
 | `Extractor`: read a document, return field values | `bedrock`, others later |
 | `Store`: jobs, documents, field values, history | `sqlite` (first), Postgres later |
