@@ -1,6 +1,6 @@
 # smpldoc-ce image. The base is pinned by digest; Dependabot proposes updates. No build tools, no
 # package installs: the app is the standard library plus the files in smpldoc/.
-FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9
 
 # Smaller attack surface: nothing here needs pip at run time.
 RUN python -m pip uninstall -y pip setuptools wheel >/dev/null 2>&1 || true \
