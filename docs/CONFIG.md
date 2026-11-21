@@ -5,9 +5,17 @@ default in place. Run `python -m smpldoc check-config` to validate without start
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `SMPLDOC_RELAY_URL` | none, required | The relay to pull mail from. `https` only (plain `http` on loopback for tests) |
+| `SMPLDOC_MAIL_SOURCE` | inferred | `relay` or `s3`. Required only when both sets of settings are present |
+| `SMPLDOC_RELAY_URL` | none, required for `relay` | The relay to pull mail from. `https` only (plain `http` on loopback for tests) |
 | `SMPLDOC_RELAY_TOKEN_FILE` | none | File holding the relay token. Preferred. Use a Docker or Kubernetes secret |
 | `SMPLDOC_RELAY_TOKEN` | none | The token itself. Set this or the `_FILE` form, not both |
+| `SMPLDOC_S3_BUCKET` | none, required for `s3` | The bucket SES writes mail to |
+| `SMPLDOC_S3_REGION` | none, required for `s3` | The bucket's region, for example `eu-west-1` |
+| `SMPLDOC_S3_PREFIX` | `inbox/` | Folder SES writes to. Mail lives at `<prefix><mailbox>/<id>` |
+| `SMPLDOC_S3_ENDPOINT` | AWS | An S3-compatible server instead of AWS. `https` only (plain `http` on loopback) |
+| `SMPLDOC_S3_AUTHSERV_ID` | `amazonses.com` | Only an `Authentication-Results` header naming this server is trusted |
+| `SMPLDOC_MAIL_DOMAIN` | `mail.invalid` | Domain used to turn a mailbox folder into an address |
+| `SMPLDOC_MAX_MESSAGE_BYTES` | `25000000` | Larger messages are refused (relay) or quarantined (S3) |
 | `SMPLDOC_DATA_DIR` | `/data` | SQLite file and stored documents. Created with mode 700 |
 | `SMPLDOC_POLL_SECONDS` | `30` | Seconds between pulls (1 to 3600). Errors back off up to 8 times longer |
 | `SMPLDOC_BATCH` | `10` | Messages per pull (1 to 100) |
@@ -19,6 +27,8 @@ default in place. Run `python -m smpldoc check-config` to validate without start
 ```bash
 python -m smpldoc run                      # the default: pull, process, serve /healthz and /readyz
 python -m smpldoc check-config             # validate settings, print nothing secret
+python -m smpldoc jobs acme                # list a company's jobs
+python -m smpldoc job acme JOB_ID          # one job: documents, values, step history
 python -m smpldoc add-company acme "Acme"  # a company's mail address is acme@<your domain>
 ```
 
@@ -26,3 +36,7 @@ Exit codes: 0 ok, 1 command failed, 2 bad usage or settings, 3 refused to start 
 
 `/healthz` says the process is up. `/readyz` says a pull cycle finished recently, so it turns 503
 while the relay is unreachable.
+
+AWS credentials are never `SMPLDOC_` settings. The S3 source reads `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY` (for trials), or uses an ECS task role or an EC2 instance role (preferred).
+See [DEPLOY_AWS.md](DEPLOY_AWS.md).

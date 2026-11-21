@@ -26,6 +26,14 @@ All notable changes to this project are documented here. The format follows
   with secret files and unknown-setting errors, and a closed health server.
 - Exposure safety: refuses a public bind when a protected route has no sign-in, probes protected
   routes anonymously at start, protected routes fail closed.
+- `s3-inbox` mail source for Amazon SES: reads a private bucket, hands each message out once, moves
+  collected mail to `processed/` and anything oversize or unroutable to `quarantine/`, and trusts only the
+  topmost `Authentication-Results` header that names `amazonses.com`.
+- AWS SigV4 signing on the standard library (checked against AWS's documented examples and botocore) and
+  credential providers for env keys, ECS task roles and EC2 roles through IMDSv2.
+- `SMPLDOC_MAIL_SOURCE` and the S3 settings; `jobs` and `job` commands.
+- `deploy/aws/mail-intake.yaml` (SES rule, private bucket, least-privilege role), `deploy/aws/compose.yaml`
+  and `docs/DEPLOY_AWS.md`.
 - Hardened `Dockerfile` (digest-pinned base, non-root, health check) and example `compose.yaml`
   (read-only, no capabilities, loopback port, secret file). CI builds the image, scans it with
   Trivy and smoke-tests it with the same hardening flags.
