@@ -10,22 +10,19 @@ from datetime import datetime, timezone
 
 from smpldoc.adapters.fs_blob import FileBlob
 from smpldoc.adapters.plain_text import PlainTextExtractor
+from smpldoc.adapters.rules_guard import GuardedEvaluator
+from smpldoc.cli_admin import COMMANDS as ADMIN_COMMANDS, clean, run_admin
 from smpldoc.adapters.relay_pull import RelayError
 from smpldoc.adapters.sqlite_store import SqliteStore
 from smpldoc.config import ConfigError, load
 from smpldoc.domain.runner import Runner
 from smpldoc.exposure import ExposureError, check_exposure, probe_host, self_check
 from smpldoc.http_server import Heartbeat, build_server, default_routes
-from smpldoc.mail_source import build_mail_in
+from smpldoc.mail_source import build_mail_in, build_mail_out
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
-CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
-
-
-def _clean(text, limit=200):
-    """Mail text is untrusted: no terminal control characters reach an operator's screen."""
-    return CONTROL.sub("?", str(text))[:limit]
-COUNTS = ("completed", "failed", "held", "skipped", "rejected", "deferred")
+_clean = clean
+COUNTS = ("completed", "failed", "held", "skipped", "rejected", "deferred", "delivered", "delivery_failed")
 
 
 def run_loop(runner, beat, poll_seconds, wait, log):
@@ -43,7 +40,7 @@ def run_loop(runner, beat, poll_seconds, wait, log):
         else:
             errors = 0
             beat.beat()
-            log({"event": "cycle", **{k: getattr(summary, k) for k in COUNTS}})
+            log({"event": "cycle", **{k: getattr(summary, k, 0) for k in COUNTS}})
         if wait(poll_seconds * min(2 ** errors, 8) if errors else poll_seconds):
             return
 
@@ -78,6 +75,12 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
                 store.close()
             print(f"added {args[0]}", file=out)
             return 0
+        if command in ADMIN_COMMANDS:
+            store = _open(load(env, need_relay=False))
+            try:
+                return run_admin(command, args, store, out, err)
+            finally:
+                store.close()
         if command in ("jobs", "job"):
             need = 1 if command == "jobs" else 2
             if len(args) != need:
@@ -91,7 +94,8 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
                     return 1
                 if command == "jobs":
                     for j in store.list_jobs(company.id):
-                        print(f"{j.id}  {j.status:<10}  {j.created_at[:19]}  {_clean(j.subject, 60)}" + (f"  [{_clean(j.error, 40)}]" if j.error else ""), file=out)
+                        print(f"{j.id}  {j.status:<10}  {j.created_at[:19]}  {_clean(j.subject, 60)}" + (f"  [{_clean(j.error, 40)}]" if j.error else "")
+                              + ("  [needs review]" if j.rule_conflict else "") + (f"  [forward queued: {_clean(j.forward_target, 41)}]" if j.forward_target else ""), file=out)
                     return 0
                 job = store.get_job(company.id, args[1])
                 if job is None:
@@ -112,7 +116,7 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
             print(f"config ok: mail={c.mail_source} bind={c.bind}:{c.port} data={c.data_dir}", file=out)
             return 0
         if command != "run":
-            print("usage: python -m smpldoc [run | check-config | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID]", file=err)
+            print("usage: python -m smpldoc [run | check-config | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID | rules | targets | job-action ...]  (see docs/ROUTING.md)", file=err)
             return 2
         config = load(env)
     except ConfigError as e:
@@ -129,7 +133,8 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
 
     store = _open(config)
     runner = Runner(build_mail_in(config, env), store, FileBlob(os.path.join(config.data_dir, "blobs")),
-                    PlainTextExtractor(), batch=config.batch)
+                    PlainTextExtractor(), batch=config.batch,
+                    mail_out=build_mail_out(config), evaluate=GuardedEvaluator(), max_forward_bytes=config.max_forward_bytes)
     server = build_server(config.bind, config.port, routes)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
