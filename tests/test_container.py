@@ -50,5 +50,25 @@ class ComposeTest(unittest.TestCase):
         self.assertIn("secrets/", (ROOT / ".gitignore").read_text())
 
 
+AWS_COMPOSE = (ROOT / "deploy" / "aws" / "compose.yaml").read_text()
+
+
+class AwsComposeTest(unittest.TestCase):
+    def test_container_is_locked_down(self):
+        for needle in ("read_only: true", "no-new-privileges:true", "cap_drop:", "- ALL", "pids_limit:", "mem_limit:"):
+            self.assertIn(needle, AWS_COMPOSE)
+        self.assertNotIn("privileged", AWS_COMPOSE)
+        self.assertNotIn("docker.sock", AWS_COMPOSE)
+        self.assertNotRegex(AWS_COMPOSE, r"network_mode:\s*host")
+
+    def test_no_aws_keys_anywhere_it_uses_the_role(self):
+        self.assertNotRegex(AWS_COMPOSE, r"AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN)\s*[:=]")
+        self.assertIn("SMPLDOC_MAIL_SOURCE: s3", AWS_COMPOSE)
+
+    def test_the_port_is_loopback_only(self):
+        for port in re.findall(r"(?m)^\s*-\s*\"?([^\s\"]*\d+:\d+)\"?\s*$", AWS_COMPOSE):
+            self.assertTrue(port.startswith("127.0.0.1:"), port)
+
+
 if __name__ == "__main__":
     unittest.main()

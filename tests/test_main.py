@@ -10,6 +10,7 @@ import unittest
 
 from smpldoc.adapters.relay_pull import RelayError
 from smpldoc.adapters.sqlite_store import SqliteStore
+from smpldoc.domain.models import NewDocument, NewValue
 from smpldoc.http_server import Heartbeat
 from smpldoc.main import main, run_loop
 from tests.fake_relay import FakeRelay
@@ -123,6 +124,56 @@ class CliTest(unittest.TestCase):
         code = main(["run"], env, out=out, err=err, extra_routes=[Route("/jobs", lambda r: (200, {}), public=False)])
         self.assertEqual(code, 3)
         self.assertIn("refusing", err.getvalue().lower())
+
+
+class JobsCliTest(unittest.TestCase):
+    """`jobs` and `job` are how an operator sees results until the portal exists."""
+
+    def setUp(self):
+        self._d = tempfile.TemporaryDirectory()
+        self.addCleanup(self._d.cleanup)
+        self.env = {"SMPLDOC_DATA_DIR": os.path.join(self._d.name, "data")}
+        store = SqliteStore(os.path.join(self.env["SMPLDOC_DATA_DIR"], "smpldoc.db")) if os.makedirs(self.env["SMPLDOC_DATA_DIR"]) is None else None
+        self.addCleanup(store.close)
+        company = store.add_company("acme", "Acme")
+        job, _ = store.create_job(company.id, "s1", "s@x.test", "Invoice March", "rk", "received",
+                                  [NewDocument("body.txt", "text/plain", "k", 9)])
+        doc = store.list_documents(company.id, job.id)[0]
+        store.add_event(company.id, job.id, "ingest", "ok")
+        store.complete_job(company.id, job.id, [NewValue(doc.id, "total", "9.50")])
+        self.job = job
+
+    def run_cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        return main(list(argv), self.env, out=out, err=err), out.getvalue(), err.getvalue()
+
+    def test_jobs_lists_each_job_with_its_status(self):
+        code, out, _ = self.run_cli("jobs", "acme")
+        self.assertEqual(code, 0)
+        self.assertIn(self.job.id, out)
+        self.assertIn("done", out)
+        self.assertIn("Invoice March", out)
+
+    def test_job_shows_values_and_step_history(self):
+        code, out, _ = self.run_cli("job", "acme", self.job.id)
+        self.assertEqual(code, 0)
+        self.assertIn("total", out)
+        self.assertIn("9.50", out)
+        self.assertIn("ingest", out)
+
+    def test_unknown_company_or_job_is_a_clear_failure(self):
+        self.assertEqual(self.run_cli("jobs", "nobody")[0], 1)
+        self.assertEqual(self.run_cli("job", "acme", "nope")[0], 1)
+        self.assertEqual(self.run_cli("jobs")[0], 1)
+
+    def test_subject_text_cannot_inject_terminal_control_characters(self):
+        store = SqliteStore(os.path.join(self.env["SMPLDOC_DATA_DIR"], "smpldoc.db"))
+        self.addCleanup(store.close)
+        c = store.find_company_by_slug("acme")
+        store.create_job(c.id, "s2", "s@x.test", "bad\x1b[31m\x07subject", "rk", "received", [])
+        _, out, _ = self.run_cli("jobs", "acme")
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\x07", out)
 
 
 class EndToEndTest(unittest.TestCase):

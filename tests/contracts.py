@@ -145,7 +145,8 @@ class ExtractorContract:
 
 
 class MailInContract:
-    """Needs self.mail and self.deliver(raw, sender, recipient, verdict)."""
+    """Needs self.mail and self.deliver(raw, sender, recipient, verdict), which returns the exact
+    bytes the source will hand out (a source may add its own headers, as SES does)."""
 
     def deliver(self, raw=RAW, sender="s@x.test", recipient="acme@in.test", verdict="pass"):
         raise NotImplementedError
@@ -154,13 +155,13 @@ class MailInContract:
         self.assertEqual(self.mail.poll(10), [])
 
     def test_poll_fetch_returns_exact_bytes_and_fields(self):
-        self.deliver(RAW, "s@x.test", "acme@in.test", "pass")
+        stored = self.deliver(RAW, "s@x.test", "acme@in.test", "pass")
         got = self.mail.poll(10)
         self.assertEqual(len(got), 1)
         m = got[0]
         self.assertEqual((m.sender, m.recipient, m.verdict), ("s@x.test", "acme@in.test", "pass"))
-        self.assertEqual(self.mail.fetch(m), RAW)
-        self.assertEqual(m.size, len(RAW))
+        self.assertEqual(self.mail.fetch(m), stored)
+        self.assertEqual(m.size, len(stored))
 
     def test_in_flight_messages_are_not_delivered_twice(self):
         self.deliver()

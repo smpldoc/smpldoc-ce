@@ -18,7 +18,10 @@ New features start as a row here, then an issue, then a failing test.
 | health | `/healthz` and `/readyz` on a closed HTTP surface | built | `tests/test_http_exposure.py` | Public routes only |
 | exposure-check | Refuse an open bind with unprotected routes; probe protected routes at start | built | `tests/test_http_exposure.py`, `tests/test_main.py` | Protected routes arrive with the portal |
 | container | Hardened image and example compose file | building | `tests/test_container.py`, CI image job | Not yet signed or published |
-| mail-in-s3 | Read mail SES wrote to a bucket | planned | | AWS bring-your-own mail |
+| mail-in-s3 | Read mail SES wrote to a bucket | built | `tests/test_s3_inbox.py` | `DEPLOY_AWS.md`. Trusts only SES's own verdict header |
+| aws-signing | SigV4 on the standard library | built | `tests/test_sigv4.py` | AWS's examples, plus a botocore cross-check |
+| aws-credentials | ECS task role, EC2 role (IMDSv2) or env keys | built | `tests/test_aws_creds.py` | Roles preferred |
+| cli-jobs | `jobs` and `job` commands to see results | built | `tests/test_main.py` | Until the portal exists |
 | mail-in-imap | Read a mailbox | planned | | |
 | mail-out | Forward a finished job (SES or SMTP) | planned | | |
 | rules | Route a job by its values | planned | | Port from the private product |
@@ -27,6 +30,6 @@ New features start as a row here, then an issue, then a failing test.
 | oidc | Sign-in through any OIDC provider | planned | | Recipes: Entra, Cognito, Okta, Clerk |
 | mcp | MCP server | planned | | Read only by default, same OIDC tokens |
 | container-release | Sign, SBOM and publish the image on a version tag | planned | | cosign, CycloneDX |
-| deploy-aws | Deploy guide | planned | | First |
+| deploy-aws | CloudFormation stack and guide | building | `tests/test_cloudformation.py`, `cfn-lint` | Linted and statically checked, not yet deployed into a real account |
 | deploy-cloudflare | Deploy guide | planned | | |
 | deploy-azure | Deploy guide | planned | | Azure has no native inbound mail like SES: use the relay |
