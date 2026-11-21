@@ -5,7 +5,7 @@ methods named at the top of the mixin.
 """
 import hashlib
 
-from smpldoc.domain.models import NewDocument, NewValue
+from smpldoc.domain.models import Condition, NewDocument, NewValue
 
 RAW = b"From: a@b.test\r\n\r\nbody \x00\xff\xfe binary-safe\r\n"
 
@@ -68,9 +68,106 @@ class StoreContract:
         values = [NewValue(doc.id, "invoice", "42"), NewValue(doc.id, "total", "9.50")]
         self.assertTrue(self.store.complete_job(self.a.id, job.id, values))
         self.assertFalse(self.store.complete_job(self.a.id, job.id, values))
-        self.assertEqual(self.store.get_job(self.a.id, job.id).status, "done")
+        self.assertEqual(self.store.get_job(self.a.id, job.id).status, "ready")
         got = self.store.list_field_values(self.a.id, job.id)
         self.assertEqual([(v.name, v.value) for v in got], [("invoice", "42"), ("total", "9.50")])
+
+    def test_completing_again_after_a_reprocess_replaces_the_values(self):
+        job, _ = self.job(self.a, docs=[NewDocument("a.txt", "text/plain", "k1", 3)])
+        doc = self.store.list_documents(self.a.id, job.id)[0]
+        self.assertTrue(self.store.complete_job(self.a.id, job.id, [NewValue(doc.id, "total", "1")]))
+        self.assertTrue(self.store.move_job(self.a.id, job.id, ["ready"], "extracting"))
+        self.assertTrue(self.store.complete_job(self.a.id, job.id, [NewValue(doc.id, "total", "2"), NewValue(doc.id, "ref", "x")]))
+        self.assertEqual([(v.name, v.value) for v in self.store.list_field_values(self.a.id, job.id)], [("total", "2"), ("ref", "x")])
+
+    def test_complete_job_can_hold_close_flag_a_conflict_or_queue_a_forward(self):
+        for i, (status, kw, check) in enumerate([
+            ("held", {}, lambda j: j.status == "held"),
+            ("closed", {}, lambda j: j.status == "closed"),
+            ("ready", {"conflict": ("r1", "r2")}, lambda j: j.rule_conflict == ("r1", "r2")),
+            ("ready", {"forward_target": "ap"}, lambda j: j.forward_target == "ap"),
+        ]):
+            job, _ = self.job(self.a, f"c{i}")
+            self.assertTrue(self.store.complete_job(self.a.id, job.id, [], status=status, **kw))
+            self.assertTrue(check(self.store.get_job(self.a.id, job.id)), status)
+        job, _ = self.job(self.a, "bad")
+        with self.assertRaises(ValueError):
+            self.store.complete_job(self.a.id, job.id, [], status="done")
+
+    def test_move_job_is_compare_and_set_and_clears_the_conflict(self):
+        job, _ = self.job(self.a)
+        self.store.complete_job(self.a.id, job.id, [], conflict=("r1",))
+        self.assertFalse(self.store.move_job(self.a.id, job.id, ["held"], "closed"))
+        self.assertFalse(self.store.move_job(self.b.id, job.id, ["ready"], "closed"))
+        self.assertTrue(self.store.move_job(self.a.id, job.id, ["ready", "held"], "held"))
+        got = self.store.get_job(self.a.id, job.id)
+        self.assertEqual((got.status, got.rule_conflict), ("held", ()))
+
+    def test_move_job_can_queue_a_forward_without_changing_status(self):
+        job, _ = self.job(self.a)
+        self.store.complete_job(self.a.id, job.id, [])
+        self.assertTrue(self.store.move_job(self.a.id, job.id, ["ready"], "ready", forward_target="ap"))
+        self.assertEqual(self.store.get_job(self.a.id, job.id).forward_target, "ap")
+        self.assertEqual([j.id for j in self.store.list_to_deliver()], [job.id])
+
+    def test_delivery_settles_to_done_or_records_the_failure(self):
+        j1, _ = self.job(self.a, "d1")
+        j2, _ = self.job(self.a, "d2")
+        for j in (j1, j2):
+            self.store.complete_job(self.a.id, j.id, [], forward_target="ap")
+        self.assertTrue(self.store.settle_delivery(self.a.id, j1.id, True))
+        self.assertTrue(self.store.settle_delivery(self.a.id, j2.id, False, "SendError"))
+        d1, d2 = self.store.get_job(self.a.id, j1.id), self.store.get_job(self.a.id, j2.id)
+        self.assertEqual((d1.status, d1.forward_target, d1.error), ("done", "", ""))
+        self.assertEqual((d2.status, d2.forward_target, d2.error), ("ready", "", "SendError"))
+        self.assertFalse(self.store.settle_delivery(self.a.id, j1.id, True), "nothing queued any more")
+        self.assertEqual(self.store.list_to_deliver(), [])
+
+    def test_a_job_remembers_who_it_was_sent_to(self):
+        job, _ = self.store.create_job(self.a.id, "r", "x@y.test", "S", "rk", "received", [], recipient="acme@in.test")
+        self.assertEqual(self.store.get_job(self.a.id, job.id).recipient, "acme@in.test")
+
+    def test_documents_know_if_they_are_the_body(self):
+        job, _ = self.job(self.a, docs=[NewDocument("body.txt", "text/plain", "k1", 3, "body"), NewDocument("a.pdf", "application/pdf", "k2", 9)])
+        self.assertEqual([d.kind for d in self.store.list_documents(self.a.id, job.id)], ["body", "attachment"])
+
+    def test_rules_are_stored_per_company_and_limited(self):
+        r = self.store.add_rule(self.a.id, "Big", "forward", "ap", [Condition("subject", "x"), Condition("format", "pdf")])
+        self.store.add_rule(self.a.id, "Off", "hold", "", [Condition("from", "y")], enabled=False)
+        self.assertEqual([x.name for x in self.store.list_rules(self.a.id)], ["Big", "Off"])
+        self.assertEqual([x.name for x in self.store.list_rules(self.a.id, enabled_only=True)], ["Big"])
+        got = self.store.get_rule(self.a.id, r.id)
+        self.assertEqual((got.action, got.target, got.conditions), ("forward", "ap", (Condition("subject", "x"), Condition("format", "pdf"))))
+        self.assertEqual(self.store.list_rules(self.b.id), [])
+        self.assertIsNone(self.store.get_rule(self.b.id, r.id))
+        self.assertFalse(self.store.set_rule_enabled(self.b.id, r.id, False))
+        self.assertFalse(self.store.delete_rule(self.b.id, r.id))
+        self.assertTrue(self.store.set_rule_enabled(self.a.id, r.id, False))
+        self.assertFalse(self.store.get_rule(self.a.id, r.id).enabled)
+        self.assertTrue(self.store.delete_rule(self.a.id, r.id))
+        self.assertIsNone(self.store.get_rule(self.a.id, r.id))
+
+    def test_a_company_can_have_at_most_fifty_rules(self):
+        for i in range(50):
+            self.store.add_rule(self.a.id, f"r{i}", "hold", "", [Condition("subject", "x")])
+        with self.assertRaises(ValueError):
+            self.store.add_rule(self.a.id, "one too many", "hold", "", [Condition("subject", "x")])
+        self.store.add_rule(self.b.id, "other company is unaffected", "hold", "", [Condition("subject", "x")])
+
+    def test_forward_targets_are_named_and_scoped(self):
+        t = self.store.add_target(self.a.id, "accounts", "ap@example.com")
+        self.assertEqual((t.name, t.address), ("accounts", "ap@example.com"))
+        self.assertEqual(self.store.get_target(self.a.id, "accounts").address, "ap@example.com")
+        self.assertIsNone(self.store.get_target(self.b.id, "accounts"))
+        self.assertEqual([x.name for x in self.store.list_targets(self.a.id)], ["accounts"])
+        self.assertEqual(self.store.list_targets(self.b.id), [])
+        with self.assertRaises(ValueError):
+            self.store.add_target(self.a.id, "accounts", "other@example.com")
+        for name, addr in (("Bad Name", "a@b.test"), ("ok", "not-an-address"), ("ok", "a@b.test\r\nBcc: x@y.test")):
+            with self.assertRaises(ValueError, msg=f"{name} {addr!r}"):
+                self.store.add_target(self.a.id, name, addr)
+        self.assertFalse(self.store.delete_target(self.b.id, "accounts"))
+        self.assertTrue(self.store.delete_target(self.a.id, "accounts"))
 
     def test_held_jobs_cannot_be_completed(self):
         job, _ = self.job(self.a, status="held")

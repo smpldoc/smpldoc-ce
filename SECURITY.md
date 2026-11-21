@@ -75,6 +75,19 @@ Assume someone will publish the port by accident. The design limits what that co
   header and only if it names SES. A header the sender wrote, or one lower down, is ignored.
 - **Nothing is deleted outright**, and a listing that contains XML entity declarations is refused.
 
+## Rules and forwarding
+
+- **Forwarding goes only to named targets** an operator created. A rule or a command cannot name an
+  arbitrary address, so a mistake or a hostile mail cannot send documents somewhere new.
+- **Nothing from a mail can inject a header or an escape code.** Subjects, names and values are stripped of
+  control characters before they go into an outgoing message or onto a terminal, and the SMTP client refuses
+  a header that contains a line break.
+- **SMTP needs TLS** (STARTTLS or implicit TLS, certificate and host name checked), and the password is sent
+  only after TLS is up and never appears in an error. Plain text is allowed only to a server on this machine.
+- **Rules cannot freeze the service.** Risky patterns are refused when saved, and evaluation runs in a
+  separate process with a two-second limit.
+- **A job is never lost to a rule or a mail-out problem:** it stays `ready` with the reason recorded.
+
 ## Design limits you should know
 
 - A single container cannot wall one internal component off from another the way separate

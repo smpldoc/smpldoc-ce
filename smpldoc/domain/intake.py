@@ -13,6 +13,7 @@ class Part:
     filename: str
     content_type: str
     data: bytes
+    kind: str = "attachment"
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,6 @@ def parse_mail(raw: bytes) -> ParsedMail:
             body.append(data.decode(part.get_content_charset() or "utf-8", errors="replace"))
     text = "\n".join(b for b in body if b.strip())
     if text:
-        parts.insert(0, Part("body.txt", "text/plain", text.encode()))
+        parts.insert(0, Part("body.txt", "text/plain", text.encode(), "body"))
     mid = _CONTROL.sub("", str(msg.get("Message-ID", "") or "")).strip()[:500]
     return ParsedMail(mid, _CONTROL.sub(" ", str(msg.get("Subject", "") or ""))[:500], parts)

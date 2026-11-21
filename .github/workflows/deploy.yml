@@ -63,5 +63,7 @@ jobs:
           if docker exec smpldoc python -c "open('/app/x','w')" 2>/dev/null; then echo "root filesystem is writable"; exit 1; fi
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/nope)" = "404"
           docker exec smpldoc python -m smpldoc add-company ci "CI Co"
+          # The rule guard runs a subprocess: prove it works as a non-root user on a read-only filesystem.
+          docker exec smpldoc python -c "from smpldoc.adapters.rules_guard import GuardedEvaluator; from smpldoc.domain.models import Condition, Rule; from smpldoc.domain.rules import Facts; d = GuardedEvaluator(timeout=10)([Rule('r','c','n','hold','',True,(Condition('subject','x'),),'t')], Facts('a','b','x','y',())); assert d.kind == 'move', d; print('rule guard ok in the container')"
           docker logs smpldoc
           docker rm -f smpldoc

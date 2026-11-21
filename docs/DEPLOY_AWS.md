@@ -113,6 +113,19 @@ docker compose -f deploy/aws/compose.yaml run --rm smpldoc job acme JOB_ID
 The built-in reader only understands `Name: value` lines in text; PDFs and images are stored but not read
 yet. Mail whose sender fails SPF and DKIM is **held**, not processed.
 
+## Forwarding with SES (optional)
+
+Forwarding sends mail, which needs an SMTP server. SES provides one. In the SES console create SMTP
+credentials for your region, verify the address or domain you will send from, and set:
+
+```bash
+export SMPLDOC_SMTP_HOST=email-smtp.eu-west-1.amazonaws.com SMPLDOC_MAIL_FROM=smpldoc@mail.example.com
+# put the SMTP user and password in files, not on the command line (see CONFIG.md)
+```
+
+A new SES account is in the **sandbox**, which only lets you send to addresses you have verified. Request
+production access before forwarding to anyone else. See [ROUTING.md](ROUTING.md) for rules and targets.
+
 ## How mail is treated
 
 - **Trust.** The verdict comes only from the topmost `Authentication-Results` header, and only if it names

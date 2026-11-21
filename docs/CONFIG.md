@@ -16,6 +16,13 @@ default in place. Run `python -m smpldoc check-config` to validate without start
 | `SMPLDOC_S3_AUTHSERV_ID` | `amazonses.com` | Only an `Authentication-Results` header naming this server is trusted |
 | `SMPLDOC_MAIL_DOMAIN` | `mail.invalid` | Domain used to turn a mailbox folder into an address |
 | `SMPLDOC_MAX_MESSAGE_BYTES` | `25000000` | Larger messages are refused (relay) or quarantined (S3) |
+| `SMPLDOC_SMTP_HOST` | none | An SMTP server, to turn forwarding on. Needs `SMPLDOC_MAIL_FROM` |
+| `SMPLDOC_SMTP_PORT` | `587` | Its port (`465` for `ssl`) |
+| `SMPLDOC_SMTP_SECURITY` | `starttls` | `starttls` or `ssl`. `none` is allowed only for a server on this machine |
+| `SMPLDOC_SMTP_USER` | none | Login name, if the server needs one. Needs a password |
+| `SMPLDOC_SMTP_PASSWORD_FILE` | none | File holding the SMTP password. Preferred. Or `SMPLDOC_SMTP_PASSWORD`, not both |
+| `SMPLDOC_MAIL_FROM` | none | The address forwards are sent from. It must be allowed by your SMTP service |
+| `SMPLDOC_MAX_FORWARD_BYTES` | `10000000` | The most attachment bytes one forward may carry |
 | `SMPLDOC_DATA_DIR` | `/data` | SQLite file and stored documents. Created with mode 700 |
 | `SMPLDOC_POLL_SECONDS` | `30` | Seconds between pulls (1 to 3600). Errors back off up to 8 times longer |
 | `SMPLDOC_BATCH` | `10` | Messages per pull (1 to 100) |
@@ -29,6 +36,7 @@ python -m smpldoc run                      # the default: pull, process, serve /
 python -m smpldoc check-config             # validate settings, print nothing secret
 python -m smpldoc jobs acme                # list a company's jobs
 python -m smpldoc job acme JOB_ID          # one job: documents, values, step history
+python -m smpldoc rules acme               # rules, forward targets and job moves: see ROUTING.md
 python -m smpldoc add-company acme "Acme"  # a company's mail address is acme@<your domain>
 ```
 
