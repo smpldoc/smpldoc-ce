@@ -65,6 +65,16 @@ Assume someone will publish the port by accident. The design limits what that co
   capabilities dropped, no new privileges, memory and process limits, a private data directory
   (mode 700), and the example compose file publishes the port on `127.0.0.1` only.
 
+## If you read mail from S3 (Amazon SES)
+
+- **No keys.** Use an ECS task role or an EC2 instance role. The container reads them from AWS's fixed
+  link-local addresses (never from a setting), over IMDSv2 only, without following redirects.
+- **Least privilege.** The stack's policy can list `inbox/`, read and delete in `inbox/`, and write to
+  `processed/` and `quarantine/`. Nothing else.
+- **Sender checks cannot be forged.** The verdict comes only from the topmost `Authentication-Results`
+  header and only if it names SES. A header the sender wrote, or one lower down, is ignored.
+- **Nothing is deleted outright**, and a listing that contains XML entity declarations is refused.
+
 ## Design limits you should know
 
 - A single container cannot wall one internal component off from another the way separate

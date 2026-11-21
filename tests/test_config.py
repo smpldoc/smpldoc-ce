@@ -15,7 +15,8 @@ class ConfigTest(unittest.TestCase):
     def test_token_from_file_strips_the_newline(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "t")
-            open(path, "w").write("filetoken\n")
+            with open(path, "w") as f:
+                f.write("filetoken\n")
             env = {"SMPLDOC_RELAY_URL": BASE["SMPLDOC_RELAY_URL"], "SMPLDOC_RELAY_TOKEN_FILE": path}
             self.assertEqual(load(env).relay_token, "filetoken")
 
@@ -26,7 +27,8 @@ class ConfigTest(unittest.TestCase):
     def test_missing_or_empty_token_file_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
             empty = os.path.join(d, "e")
-            open(empty, "w").write("\n")
+            with open(empty, "w") as f:
+                f.write("\n")
             for path in ("/nope/missing", empty):
                 with self.assertRaises(ConfigError):
                     load({"SMPLDOC_RELAY_URL": BASE["SMPLDOC_RELAY_URL"], "SMPLDOC_RELAY_TOKEN_FILE": path})
@@ -56,6 +58,40 @@ class ConfigTest(unittest.TestCase):
     def test_relay_url_is_validated_early(self):
         with self.assertRaises(ConfigError):
             load({**BASE, "SMPLDOC_RELAY_URL": "http://relay.example.com"})
+
+
+S3 = {"SMPLDOC_MAIL_SOURCE": "s3", "SMPLDOC_S3_BUCKET": "my-mail", "SMPLDOC_S3_REGION": "eu-west-1"}
+
+
+class MailSourceConfigTest(unittest.TestCase):
+    def test_s3_needs_no_relay_and_has_safe_defaults(self):
+        c = load(S3)
+        self.assertEqual((c.mail_source, c.s3_bucket, c.s3_region, c.s3_prefix), ("s3", "my-mail", "eu-west-1", "inbox/"))
+        self.assertEqual((c.s3_endpoint, c.s3_authserv_id, c.mail_domain, c.max_message_bytes), (None, "amazonses.com", "mail.invalid", 25_000_000))
+        self.assertIsNone(c.relay_url)
+
+    def test_the_source_is_inferred_when_only_one_is_configured(self):
+        self.assertEqual(load({k: v for k, v in S3.items() if k != "SMPLDOC_MAIL_SOURCE"}).mail_source, "s3")
+        self.assertEqual(load(BASE).mail_source, "relay")
+
+    def test_two_sources_without_a_choice_is_an_error(self):
+        with self.assertRaises(ConfigError):
+            load({**BASE, **{k: v for k, v in S3.items() if k != "SMPLDOC_MAIL_SOURCE"}})
+        self.assertEqual(load({**BASE, **S3, "SMPLDOC_MAIL_SOURCE": "relay"}).mail_source, "relay")
+
+    def test_s3_settings_are_validated(self):
+        bad = [("SMPLDOC_S3_BUCKET", "UPPER"), ("SMPLDOC_S3_BUCKET", "a"), ("SMPLDOC_S3_BUCKET", "has space"),
+               ("SMPLDOC_S3_REGION", "mars"), ("SMPLDOC_S3_REGION", "../x"), ("SMPLDOC_S3_PREFIX", "/inbox/"),
+               ("SMPLDOC_S3_PREFIX", "inbox"), ("SMPLDOC_S3_PREFIX", "a/../b/"), ("SMPLDOC_S3_ENDPOINT", "http://s3.example.com"),
+               ("SMPLDOC_MAIL_DOMAIN", "not a domain"), ("SMPLDOC_MAX_MESSAGE_BYTES", "0"), ("SMPLDOC_MAIL_SOURCE", "ftp")]
+        for key, value in bad:
+            with self.assertRaises(ConfigError, msg=f"{key}={value}"):
+                load({**S3, key: value})
+        with self.assertRaises(ConfigError):
+            load({k: v for k, v in S3.items() if k != "SMPLDOC_S3_BUCKET"})
+
+    def test_a_local_s3_compatible_server_is_allowed_on_loopback(self):
+        self.assertEqual(load({**S3, "SMPLDOC_S3_ENDPOINT": "http://127.0.0.1:9000"}).s3_endpoint, "http://127.0.0.1:9000")
 
 
 if __name__ == "__main__":

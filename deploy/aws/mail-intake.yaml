@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  smpldoc-ce mail intake. Amazon SES receives mail for one domain and writes it to a private S3 bucket;
+  the smpldoc-ce container reads that bucket with a role (no access keys). Nothing here opens an inbound
+  port on your container. Guide: docs/DEPLOY_AWS.md
+
+Parameters:
+  MailDomain:
+    Type: String
+    Description: A domain or subdomain you control that will receive mail, for example mail.example.com. Use a dedicated subdomain; its MX record replaces any mail service on that name.
+    AllowedPattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+  Mailbox:
+    Type: String
+    Description: The company name smpldoc-ce files this mail under (the one you give to add-company). Lowercase letters, digits, dashes.
+    AllowedPattern: "^[a-z0-9][a-z0-9-]{0,62}$"
+  InboxRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 7
+    Description: Mail the container has not collected after this many days is deleted. Keeps cost bounded if the container is down for long.
+  ProcessedRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+    Description: Collected mail is kept this long in processed/ so a mistake can be undone, then deleted.
+  QuarantineRetentionDays:
+    Type: Number
+    Default: 30
+    MinValue: 1
+    Description: Mail that was too large or had no mailbox folder waits in quarantine/ this long for you to look at it.
+
+Resources:
+  MailBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-uncollected-mail
+            Status: Enabled
+            Prefix: inbox/
+            ExpirationInDays: !Ref InboxRetentionDays
+          - Id: expire-processed-mail
+            Status: Enabled
+            Prefix: processed/
+            ExpirationInDays: !Ref ProcessedRetentionDays
+          - Id: expire-quarantined-mail
+            Status: Enabled
+            Prefix: quarantine/
+            ExpirationInDays: !Ref QuarantineRetentionDays
+          - Id: abort-stuck-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  MailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MailBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyPlainHttp
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt MailBucket.Arn
+              - !Sub "${MailBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: AllowSesToWriteInbox
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${MailBucket.Arn}/inbox/*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              StringLike:
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:receipt-rule-set/${AWS::StackName}-rules:receipt-rule/*"
+
+  DomainIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref MailDomain
+
+  ReceiptRuleSet:
+    Type: AWS::SES::ReceiptRuleSet
+    Properties:
+      RuleSetName: !Sub "${AWS::StackName}-rules"
+
+  ReceiptRule:
+    Type: AWS::SES::ReceiptRule
+    DependsOn: MailBucketPolicy
+    Properties:
+      RuleSetName: !Ref ReceiptRuleSet
+      Rule:
+        Name: !Sub "${AWS::StackName}-to-s3"
+        Enabled: true
+        ScanEnabled: true
+        TlsPolicy: Optional
+        Recipients:
+          - !Ref MailDomain
+        Actions:
+          - S3Action:
+              BucketName: !Ref MailBucket
+              ObjectKeyPrefix: !Sub "inbox/${Mailbox}/"
+
+  ReadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Lets smpldoc-ce read, collect and quarantine mail in its own bucket, and nothing else.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ListInbox
+            Effect: Allow
+            Action: s3:ListBucket
+            Resource: !GetAtt MailBucket.Arn
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - inbox/
+                  - inbox/*
+          - Sid: ReadAndRemoveFromInbox
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:DeleteObject
+            Resource: !Sub "${MailBucket.Arn}/inbox/*"
+          - Sid: MoveToProcessedOrQuarantine
+            Effect: Allow
+            Action: s3:PutObject
+            Resource:
+              - !Sub "${MailBucket.Arn}/processed/*"
+              - !Sub "${MailBucket.Arn}/quarantine/*"
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref ReadPolicy
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Ref ReadPolicy
+
+Outputs:
+  BucketName:
+    Description: The private bucket SES writes to.
+    Value: !Ref MailBucket
+  RuleSetName:
+    Description: Make this the active SES rule set (one active per region), see the guide.
+    Value: !Ref ReceiptRuleSet
+  InstanceProfileName:
+    Description: Attach this to the EC2 instance that runs smpldoc-ce.
+    Value: !Ref InstanceProfile
+  TaskRoleArn:
+    Description: Use this as the task role if you run smpldoc-ce on ECS.
+    Value: !GetAtt TaskRole.Arn
+  MxRecord:
+    Description: Add this MX record to the DNS of the mail domain.
+    Value: !Sub "10 inbound-smtp.${AWS::Region}.amazonaws.com"
+  DkimCname1:
+    Description: Add these three CNAME records (name -> value) so SES can verify the domain.
+    Value: !Sub "${DomainIdentity.DkimDNSTokenName1} -> ${DomainIdentity.DkimDNSTokenValue1}"
+  DkimCname2:
+    Value: !Sub "${DomainIdentity.DkimDNSTokenName2} -> ${DomainIdentity.DkimDNSTokenValue2}"
+  DkimCname3:
+    Value: !Sub "${DomainIdentity.DkimDNSTokenName3} -> ${DomainIdentity.DkimDNSTokenValue3}"
+  SmpldocSettings:
+    Description: "The settings smpldoc-ce needs. No keys: it uses the role."
+    Value: !Sub "SMPLDOC_MAIL_SOURCE=s3 SMPLDOC_S3_BUCKET=${MailBucket} SMPLDOC_S3_REGION=${AWS::Region} SMPLDOC_MAIL_DOMAIN=${MailDomain}"

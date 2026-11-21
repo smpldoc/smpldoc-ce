@@ -13,6 +13,7 @@ class RelayPullContractTest(MailInContract, unittest.TestCase):
 
     def deliver(self, raw=RAW, sender="s@x.test", recipient="acme@in.test", verdict="pass"):
         self.relay.deliver(raw, sender, recipient, verdict)
+        return raw
 
     def test_token_is_sent_as_bearer_on_every_call(self):
         self.deliver()
