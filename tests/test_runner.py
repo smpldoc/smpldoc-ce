@@ -1,10 +1,11 @@
 import unittest
 from email.message import EmailMessage
 
-from smpldoc.adapters.memory import MemoryBlob, MemoryMailIn
+from smpldoc.adapters.memory import MemoryBlob, MemoryMailIn, MemoryMailOut
 from smpldoc.adapters.plain_text import PlainTextExtractor
 from smpldoc.adapters.sqlite_store import SqliteStore
-from smpldoc.domain.errors import ExtractError
+from smpldoc.domain.errors import ExtractError, SendError
+from smpldoc.domain.models import Condition
 from smpldoc.domain.intake import safe_filename, slug_from_recipient
 from smpldoc.domain.runner import Runner
 
@@ -46,6 +47,9 @@ class RunnerCase(unittest.TestCase):
         return Runner(self.mail, self.store, self.blob, extractor or PlainTextExtractor(),
                       sleep=self.sleeps.append, **kw)
 
+    def rule(self, name, action, *conds, target="", company=None):
+        return self.store.add_rule((company or self.acme).id, name, action, target, [Condition(f, p) for f, p in conds])
+
     def deliver(self, raw=None, recipient="acme@in.test", verdict="pass"):
         self.mail.deliver(raw or mail(), "s@x.test", recipient, verdict)
 
@@ -63,9 +67,9 @@ class HappyPath(RunnerCase):
         self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
         summary = self.runner().run_once()
         job = self.only_job()
-        self.assertEqual(job.status, "done")
+        self.assertEqual(job.status, "ready")
         self.assertEqual((summary.completed, summary.failed), (1, 0))
-        self.assertEqual(self.steps(job), [("ingest", "ok"), ("extract", "ok"), ("close", "ok")])
+        self.assertEqual(self.steps(job), [("ingest", "ok"), ("extract", "ok"), ("rules", "ok"), ("finish", "ok")])
         values = {(v.name, v.value) for v in self.store.list_field_values(self.acme.id, job.id)}
         self.assertEqual(values, {("invoice", "42"), ("total", "9.50"), ("ref", "A1")})
         self.assertEqual(self.mail.poll(10), [])
@@ -82,7 +86,7 @@ class HappyPath(RunnerCase):
     def test_malformed_mail_does_not_crash(self):
         self.deliver(b"\xff\xfe not an email at all")
         self.runner().run_once()
-        self.assertIn(self.only_job().status, {"done", "failed"})
+        self.assertIn(self.only_job().status, {"ready", "failed"})
 
 
 class Gates(RunnerCase):
@@ -142,9 +146,9 @@ class Retries(RunnerCase):
         self.deliver()
         self.runner(Flaky(2)).run_once()
         job = self.only_job()
-        self.assertEqual(job.status, "done")
+        self.assertEqual(job.status, "ready")
         self.assertEqual(self.steps(job), [("ingest", "ok"), ("extract", "retry"), ("extract", "retry"),
-                                           ("extract", "ok"), ("close", "ok")])
+                                           ("extract", "ok"), ("rules", "ok"), ("finish", "ok")])
         self.assertEqual(self.sleeps, [1.0, 2.0])
 
     def test_permanent_failure_marks_the_job_failed_and_leaks_no_content(self):
@@ -174,7 +178,7 @@ class Retries(RunnerCase):
         first = self.runner().run_once()
         self.assertEqual((first.deferred, self.store.list_jobs(self.acme.id)), (1, []))
         self.runner().run_once()
-        self.assertEqual(self.only_job().status, "done")
+        self.assertEqual(self.only_job().status, "ready")
 
 
 class CrashRecovery(RunnerCase):
@@ -185,8 +189,8 @@ class CrashRecovery(RunnerCase):
         self.assertEqual(self.only_job().status, "extracting")
         self.runner().run_once()
         job = self.only_job()
-        self.assertEqual(job.status, "done")
-        self.assertEqual(self.steps(job), [("ingest", "ok"), ("extract", "ok"), ("close", "ok")])
+        self.assertEqual(job.status, "ready")
+        self.assertEqual(self.steps(job), [("ingest", "ok"), ("extract", "ok"), ("rules", "ok"), ("finish", "ok")])
         self.assertEqual(len(self.store.list_field_values(self.acme.id, job.id)), 2)
 
     def test_a_crash_between_saving_the_job_and_acking_does_not_duplicate(self):
@@ -205,9 +209,158 @@ class CrashRecovery(RunnerCase):
         self.runner().run_once()
         self.runner().run_once()
         job = self.only_job()
-        self.assertEqual(job.status, "done")
+        self.assertEqual(job.status, "ready")
         self.assertEqual(len(self.store.list_field_values(self.acme.id, job.id)), 2)
         self.assertEqual(self.mail.poll(10), [])
+
+
+class Rules(RunnerCase):
+    def run_one(self, **kw):
+        self.deliver(mail(subject=kw.pop("subject", "March Invoice"), attachments=kw.pop("attachments", ())))
+        self.runner(**kw).run_once()
+        return self.only_job()
+
+    def test_with_no_matching_rule_the_job_waits_for_a_person(self):
+        self.rule("Refunds", "close", ("subject", "refund"))
+        job = self.run_one()
+        self.assertEqual(job.status, "ready")
+        self.assertIn(("rules", "ok"), self.steps(job))
+        self.assertEqual([e.detail for e in self.store.list_events(job.company_id, job.id) if e.step == "rules"], ["none"])
+
+    def test_a_matching_rule_moves_the_job(self):
+        for action, status in (("hold", "held"), ("close", "closed"), ("review", "ready")):
+            self.store.close()
+            self.setUp()
+            self.rule("R", action, ("subject", "invoice"))
+            job = self.run_one()
+            self.assertEqual(job.status, status, action)
+            self.assertEqual([e.detail for e in self.store.list_events(job.company_id, job.id) if e.step == "rules"], [action])
+
+    def test_rules_can_read_the_body_attachment_names_and_formats(self):
+        self.rule("Pdf from vendor", "hold", ("filename", r"^inv-\d+\.pdf$"), ("format", "pdf"), ("body", "total: 9"), ("to", "^acme@"))
+        job = self.run_one(attachments=[("inv-42.pdf", "x")])
+        self.assertEqual(job.status, "held")
+
+    def test_rules_that_disagree_flag_the_job_and_move_nothing(self):
+        a = self.rule("A", "hold", ("subject", "invoice"))
+        b = self.rule("B", "close", ("body", "total"))
+        job = self.run_one()
+        self.assertEqual((job.status, set(job.rule_conflict)), ("ready", {a.id, b.id}))
+        self.assertEqual([e.detail for e in self.store.list_events(job.company_id, job.id) if e.step == "rules"], ["conflict"])
+
+    def test_a_rule_that_cannot_be_evaluated_does_not_lose_the_job(self):
+        self.rule("A", "hold", ("subject", "invoice"))
+
+        def boom(rules, facts):
+            raise TimeoutError("slow pattern")
+
+        job = self.run_one(evaluate=boom)
+        self.assertEqual(job.status, "ready")
+        steps = self.steps(job)
+        self.assertEqual([s for s in steps if s[0] == "rules"], [("rules", "retry"), ("rules", "retry"), ("rules", "failed")])
+        self.assertEqual(steps[-1], ("finish", "ok"))
+
+    def test_a_reprocess_runs_extract_and_rules_again(self):
+        job = self.run_one()
+        self.rule("Late rule", "hold", ("subject", "invoice"))
+        self.assertTrue(self.store.move_job(self.acme.id, job.id, ["ready"], "extracting"))
+        self.runner().run_once()
+        got = self.store.get_job(self.acme.id, job.id)
+        self.assertEqual(got.status, "held")
+        self.assertEqual(len(self.store.list_field_values(self.acme.id, job.id)), 2)
+
+
+class Forwarding(RunnerCase):
+    def setUp(self):
+        super().setUp()
+        self.out = MemoryMailOut()
+        self.store.add_target(self.acme.id, "accounts", "ap@example.com")
+
+    def run_one(self, subject="March Invoice", attachments=(), **kw):
+        self.deliver(mail(subject=subject, attachments=attachments))
+        self.runner(mail_out=self.out, **kw).run_once()
+        return self.only_job()
+
+    def test_a_forward_rule_sends_the_mail_and_finishes_the_job(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        job = self.run_one(attachments=[("inv.txt", "Ref: A1\n")])
+        self.assertEqual((job.status, job.forward_target, job.error), ("done", "", ""))
+        self.assertEqual(self.steps(job)[-2:], [("finish", "ok"), ("deliver", "ok")])
+        mail_out = self.out.sent[0]
+        self.assertEqual((mail_out.to, mail_out.subject), ("ap@example.com", "March Invoice"))
+        self.assertEqual([a.filename for a in mail_out.attachments], ["inv.txt"])
+        self.assertIn("total: 9.50", mail_out.text)
+        self.assertIn("Job ID: " + job.id, mail_out.text)
+
+    def test_the_body_is_not_attached_only_real_attachments(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        self.run_one()
+        self.assertEqual(self.out.sent[0].attachments, ())
+
+    def test_transient_send_failures_are_retried_with_backoff(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        self.out.fail_times = 2
+        job = self.run_one()
+        self.assertEqual(job.status, "done")
+        self.assertEqual([s for s in self.steps(job) if s[0] == "deliver"], [("deliver", "retry"), ("deliver", "retry"), ("deliver", "ok")])
+        self.assertEqual(self.sleeps, [1.0, 2.0])
+
+    def test_a_permanent_failure_is_not_retried_and_leaves_the_job_for_a_person(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        self.out.fail_times, self.out.permanent = 5, True
+        job = self.run_one()
+        self.assertEqual((job.status, job.forward_target, job.error), ("ready", "", "SendError"))
+        self.assertEqual([s for s in self.steps(job) if s[0] == "deliver"], [("deliver", "failed")])
+        self.assertEqual(self.sleeps, [])
+        self.assertEqual(self.out.sent, [])
+
+    def test_a_failed_delivery_does_not_loop_forever(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        self.out.fail_times = 99
+        self.run_one()
+        before = len(self.store.list_events(self.acme.id, self.only_job().id))
+        self.runner(mail_out=self.out).run_once()
+        self.assertEqual(len(self.store.list_events(self.acme.id, self.only_job().id)), before)
+
+    def test_a_deleted_target_or_no_mail_out_is_a_clear_failure(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        self.store.delete_target(self.acme.id, "accounts")
+        job = self.run_one()
+        self.assertEqual((job.status, job.error), ("ready", "ForwardError"))
+        self.store.close()
+        self.setUp()
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        self.deliver(mail(subject="March Invoice"))
+        self.runner().run_once()  # no mail_out configured
+        job = self.only_job()
+        self.assertEqual((job.status, job.error), ("ready", "NotConfigured"))
+
+    def test_too_much_to_email_is_a_permanent_failure(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+        job = self.run_one(attachments=[("big.txt", "x" * 5000)], max_forward_bytes=1000)
+        self.assertEqual((job.status, job.error), ("ready", "ForwardError"))
+
+    def test_a_crash_while_sending_is_picked_up_and_sent_once(self):
+        self.rule("To accounts", "forward", ("subject", "invoice"), target="accounts")
+
+        class Dies(MemoryMailOut):
+            def send(self, mail):
+                raise Crash()
+
+        self.deliver(mail(subject="March Invoice"))
+        with self.assertRaises(Crash):
+            Runner(self.mail, self.store, self.blob, PlainTextExtractor(), mail_out=Dies(), sleep=self.sleeps.append).run_once()
+        self.assertEqual(self.only_job().forward_target, "accounts")
+        self.runner(mail_out=self.out).run_once()
+        self.runner(mail_out=self.out).run_once()
+        self.assertEqual((len(self.out.sent), self.only_job().status), (1, "done"))
+
+    def test_a_forward_a_person_queued_is_sent_on_the_next_cycle(self):
+        job = self.run_one()
+        self.assertEqual(job.status, "ready")
+        self.assertTrue(self.store.move_job(self.acme.id, job.id, ["ready"], "ready", forward_target="accounts"))
+        self.runner(mail_out=self.out).run_once()
+        self.assertEqual((self.only_job().status, len(self.out.sent)), ("done", 1))
 
 
 if __name__ == "__main__":
