@@ -1,0 +1,32 @@
+# smpldoc-ce on one machine in AWS (EC2). Mail comes from your S3 bucket and the container uses the
+# machine's IAM role, so there are no AWS keys here. Guide: docs/DEPLOY_AWS.md
+#   export SMPLDOC_S3_BUCKET=...  SMPLDOC_S3_REGION=...  SMPLDOC_MAIL_DOMAIN=...   (the stack's SmpldocSettings output)
+#   docker compose -f deploy/aws/compose.yaml up -d --build
+#   docker compose -f deploy/aws/compose.yaml run --rm smpldoc add-company <Mailbox> "Your company"
+services:
+  smpldoc:
+    build: ../..
+    image: smpldoc-ce:local
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SMPLDOC_MAIL_SOURCE: s3
+      SMPLDOC_S3_BUCKET: ${SMPLDOC_S3_BUCKET:?set SMPLDOC_S3_BUCKET from the stack output}
+      SMPLDOC_S3_REGION: ${SMPLDOC_S3_REGION:?set SMPLDOC_S3_REGION from the stack output}
+      SMPLDOC_MAIL_DOMAIN: ${SMPLDOC_MAIL_DOMAIN:?set SMPLDOC_MAIL_DOMAIN to your mail domain}
+    volumes:
+      - smpldoc-data:/data
+    restart: unless-stopped
+
+volumes:
+  smpldoc-data:

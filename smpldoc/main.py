@@ -1,4 +1,4 @@
-"""Entry point: `python -m smpldoc [run | check-config | add-company SLUG NAME]`.
+"""Entry point: `python -m smpldoc [run | check-config | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID]`.
 Exit codes: 0 ok, 1 command failed, 2 bad usage or settings, 3 refused to start (exposure)."""
 import json
 import os
@@ -10,14 +10,21 @@ from datetime import datetime, timezone
 
 from smpldoc.adapters.fs_blob import FileBlob
 from smpldoc.adapters.plain_text import PlainTextExtractor
-from smpldoc.adapters.relay_pull import RelayError, RelayPull
+from smpldoc.adapters.relay_pull import RelayError
 from smpldoc.adapters.sqlite_store import SqliteStore
 from smpldoc.config import ConfigError, load
 from smpldoc.domain.runner import Runner
 from smpldoc.exposure import ExposureError, check_exposure, probe_host, self_check
 from smpldoc.http_server import Heartbeat, build_server, default_routes
+from smpldoc.mail_source import build_mail_in
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
+CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _clean(text, limit=200):
+    """Mail text is untrusted: no terminal control characters reach an operator's screen."""
+    return CONTROL.sub("?", str(text))[:limit]
 COUNTS = ("completed", "failed", "held", "skipped", "rejected", "deferred")
 
 
@@ -71,12 +78,41 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
                 store.close()
             print(f"added {args[0]}", file=out)
             return 0
+        if command in ("jobs", "job"):
+            need = 1 if command == "jobs" else 2
+            if len(args) != need:
+                print("usage: jobs COMPANY   |   job COMPANY JOB_ID", file=err)
+                return 1
+            store = _open(load(env, need_relay=False))
+            try:
+                company = store.find_company_by_slug(args[0])
+                if company is None:
+                    print(f"no company {_clean(args[0], 63)!r}", file=err)
+                    return 1
+                if command == "jobs":
+                    for j in store.list_jobs(company.id):
+                        print(f"{j.id}  {j.status:<10}  {j.created_at[:19]}  {_clean(j.subject, 60)}" + (f"  [{_clean(j.error, 40)}]" if j.error else ""), file=out)
+                    return 0
+                job = store.get_job(company.id, args[1])
+                if job is None:
+                    print("no such job", file=err)
+                    return 1
+                print(f"job {job.id}  status {job.status}  from {_clean(job.sender, 80)}  subject {_clean(job.subject, 80)}", file=out)
+                for d in store.list_documents(company.id, job.id):
+                    print(f"  document {_clean(d.filename, 80)} ({d.content_type}, {d.size} bytes)", file=out)
+                for v in store.list_field_values(company.id, job.id):
+                    print(f"  value {_clean(v.name, 60)}: {_clean(v.value)}", file=out)
+                for e in store.list_events(company.id, job.id):
+                    print(f"  step {e.at[:19]} {e.step} {e.outcome} attempt {e.attempt}" + (f" ({_clean(e.detail, 60)})" if e.detail else ""), file=out)
+                return 0
+            finally:
+                store.close()
         if command == "check-config":
             c = load(env)
-            print(f"config ok: relay={c.relay_url} bind={c.bind}:{c.port} data={c.data_dir}", file=out)
+            print(f"config ok: mail={c.mail_source} bind={c.bind}:{c.port} data={c.data_dir}", file=out)
             return 0
         if command != "run":
-            print("usage: python -m smpldoc [run | check-config | add-company SLUG NAME]", file=err)
+            print("usage: python -m smpldoc [run | check-config | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID]", file=err)
             return 2
         config = load(env)
     except ConfigError as e:
@@ -92,7 +128,7 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
         return 3
 
     store = _open(config)
-    runner = Runner(RelayPull(config.relay_url, config.relay_token), store, FileBlob(os.path.join(config.data_dir, "blobs")),
+    runner = Runner(build_mail_in(config, env), store, FileBlob(os.path.join(config.data_dir, "blobs")),
                     PlainTextExtractor(), batch=config.batch)
     server = build_server(config.bind, config.port, routes)
     threading.Thread(target=server.serve_forever, daemon=True).start()

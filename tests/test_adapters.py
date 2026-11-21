@@ -61,6 +61,7 @@ class MemoryMailInTest(MailInContract, unittest.TestCase):
 
     def deliver(self, raw=RAW, sender="s@x.test", recipient="acme@in.test", verdict="pass"):
         self.mail.deliver(raw, sender, recipient, verdict)
+        return raw
 
 
 if __name__ == "__main__":
