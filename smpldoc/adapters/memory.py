@@ -50,3 +50,19 @@ class MemoryMailIn:
         m = self.inflight.pop(message.receipt, None)
         if m is not None:
             self._queue.appendleft(m)
+
+
+class MemoryMailOut:
+    """Records what would be sent. `fail_times` makes the next sends fail, as a transient or a permanent error."""
+
+    def __init__(self):
+        self.sent, self.fail_times, self.permanent, self._n = [], 0, False, count(1)
+
+    def send(self, mail):
+        from smpldoc.domain.errors import SendError
+
+        if self.fail_times > 0:
+            self.fail_times -= 1
+            raise SendError("simulated failure", permanent=self.permanent)
+        self.sent.append(mail)
+        return f"<mem{next(self._n)}@memory.invalid>"

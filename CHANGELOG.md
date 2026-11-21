@@ -32,6 +32,16 @@ All notable changes to this project are documented here. The format follows
 - AWS SigV4 signing on the standard library (checked against AWS's documented examples and botocore) and
   credential providers for env keys, ECS task roles and EC2 roles through IMDSv2.
 - `SMPLDOC_MAIL_SOURCE` and the S3 settings; `jobs` and `job` commands.
+- Routing rules (from, to, subject, body, file name, format; review, hold, close, forward) with the old
+  product's agree-or-conflict behaviour, saved-pattern screening, and evaluation in a time-limited
+  subprocess. Job moves with the old product's transition table.
+- Forwarding by SMTP (TLS required, certificate checked, password used only after TLS) to named forward
+  targets only, with retries for temporary failures and none for permanent ones, size caps, and header
+  and terminal-escape injection defences. Crash-safe: a queued forward survives a restart and is sent once.
+- Commands: `rules`, `rule-add/enable/disable/delete`, `targets`, `target-add/delete`, `job-action`, `resolve`.
+- **Changed:** a job now finishes as `ready` (a person decides) instead of `done`; `done` means forwarded.
+  Step names are ingest, extract, rules, finish, deliver. Reprocessing replaces a job's values.
+- `docs/ROUTING.md`.
 - `deploy/aws/mail-intake.yaml` (SES rule, private bucket, least-privilege role), `deploy/aws/compose.yaml`
   and `docs/DEPLOY_AWS.md`.
 - Hardened `Dockerfile` (digest-pinned base, non-root, health check) and example `compose.yaml`

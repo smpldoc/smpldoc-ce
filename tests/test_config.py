@@ -94,5 +94,46 @@ class MailSourceConfigTest(unittest.TestCase):
         self.assertEqual(load({**S3, "SMPLDOC_S3_ENDPOINT": "http://127.0.0.1:9000"}).s3_endpoint, "http://127.0.0.1:9000")
 
 
+SMTP = {"SMPLDOC_SMTP_HOST": "smtp.example.com", "SMPLDOC_MAIL_FROM": "smpldoc@example.com", "SMPLDOC_SMTP_USER": "u", "SMPLDOC_SMTP_PASSWORD": "pw-secret"}
+
+
+class MailOutConfigTest(unittest.TestCase):
+    def test_mail_out_is_off_unless_configured(self):
+        c = load(BASE)
+        self.assertEqual((c.smtp_host, c.mail_from), (None, None))
+
+    def test_defaults_are_safe_tls(self):
+        c = load({**BASE, **SMTP})
+        self.assertEqual((c.smtp_host, c.smtp_port, c.smtp_security, c.smtp_user, c.mail_from, c.max_forward_bytes),
+                         ("smtp.example.com", 587, "starttls", "u", "smpldoc@example.com", 10_000_000))
+        self.assertEqual(c.smtp_password, "pw-secret")
+        self.assertNotIn("pw-secret", repr(c))
+
+    def test_the_password_can_come_from_a_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "p")
+            with open(path, "w") as f:
+                f.write("from-file\n")
+            env = {k: v for k, v in SMTP.items() if k != "SMPLDOC_SMTP_PASSWORD"}
+            self.assertEqual(load({**BASE, **env, "SMPLDOC_SMTP_PASSWORD_FILE": path}).smtp_password, "from-file")
+            with self.assertRaises(ConfigError):
+                load({**BASE, **SMTP, "SMPLDOC_SMTP_PASSWORD_FILE": path})
+
+    def test_bad_mail_out_settings_are_refused(self):
+        bad = [("SMPLDOC_SMTP_SECURITY", "none"), ("SMPLDOC_SMTP_SECURITY", "carrier-pigeon"), ("SMPLDOC_SMTP_PORT", "0"),
+               ("SMPLDOC_MAIL_FROM", "not an address"), ("SMPLDOC_SMTP_HOST", "bad host!"), ("SMPLDOC_MAX_FORWARD_BYTES", "0")]
+        for key, value in bad:
+            with self.assertRaises(ConfigError, msg=f"{key}={value}"):
+                load({**BASE, **SMTP, key: value})
+        with self.assertRaises(ConfigError):
+            load({**BASE, "SMPLDOC_SMTP_HOST": "smtp.example.com"})  # no sender address
+        with self.assertRaises(ConfigError):
+            load({**BASE, "SMPLDOC_SMTP_HOST": "smtp.example.com", "SMPLDOC_MAIL_FROM": "a@example.com", "SMPLDOC_SMTP_USER": "u"})  # user without a password
+
+    def test_plain_text_is_allowed_only_for_a_local_server(self):
+        env = {**BASE, "SMPLDOC_SMTP_HOST": "127.0.0.1", "SMPLDOC_MAIL_FROM": "a@example.com", "SMPLDOC_SMTP_SECURITY": "none"}
+        self.assertEqual(load(env).smtp_security, "none")
+
+
 if __name__ == "__main__":
     unittest.main()

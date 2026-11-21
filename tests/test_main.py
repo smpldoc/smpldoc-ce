@@ -14,6 +14,7 @@ from smpldoc.domain.models import NewDocument, NewValue
 from smpldoc.http_server import Heartbeat
 from smpldoc.main import main, run_loop
 from tests.fake_relay import FakeRelay
+from tests.fake_smtp import FakeSmtp
 from tests.test_runner import mail
 
 
@@ -151,7 +152,7 @@ class JobsCliTest(unittest.TestCase):
         code, out, _ = self.run_cli("jobs", "acme")
         self.assertEqual(code, 0)
         self.assertIn(self.job.id, out)
-        self.assertIn("done", out)
+        self.assertIn("ready", out)
         self.assertIn("Invoice March", out)
 
     def test_job_shows_values_and_step_history(self):
@@ -193,9 +194,9 @@ class EndToEndTest(unittest.TestCase):
                 store = SqliteStore(os.path.join(data, "smpldoc.db"))
                 company = store.find_company_by_slug("acme")
                 deadline = time.time() + 20
-                while time.time() < deadline and not [j for j in store.list_jobs(company.id) if j.status == "done"]:
+                while time.time() < deadline and not [j for j in store.list_jobs(company.id) if j.status == "ready"]:
                     time.sleep(0.1)
-                self.assertEqual([j.status for j in store.list_jobs(company.id)], ["done"])
+                self.assertEqual([j.status for j in store.list_jobs(company.id)], ["ready"])
                 import urllib.request
                 self.assertEqual(urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=5).status, 200)
                 self.assertEqual(urllib.request.urlopen(f"http://127.0.0.1:{port}/readyz", timeout=5).status, 200)
@@ -206,6 +207,47 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(result, [0])
             self.assertNotIn("tok", err.getvalue())
             self.assertNotIn("Invoice", err.getvalue())  # no document text in logs
+
+
+class ForwardEndToEndTest(unittest.TestCase):
+    def test_a_rule_forwards_real_mail_through_the_real_service(self):
+        relay, smtp = FakeRelay(), FakeSmtp()
+        self.addCleanup(relay.close)
+        self.addCleanup(smtp.close)
+        with tempfile.TemporaryDirectory() as d:
+            data, port = os.path.join(d, "data"), free_port()
+            env = {"SMPLDOC_DATA_DIR": data, "SMPLDOC_RELAY_URL": relay.url, "SMPLDOC_RELAY_TOKEN": "tok", "SMPLDOC_POLL_SECONDS": "1",
+                   "SMPLDOC_PORT": str(port), "SMPLDOC_SMTP_HOST": "127.0.0.1", "SMPLDOC_SMTP_PORT": str(smtp.port),
+                   "SMPLDOC_SMTP_SECURITY": "none", "SMPLDOC_MAIL_FROM": "smpldoc@example.com"}
+            cli = lambda *a: main(list(a), env, out=io.StringIO(), err=io.StringIO())
+            self.assertEqual(cli("add-company", "acme", "Acme"), 0)
+            self.assertEqual(cli("target-add", "acme", "accounts", "ap@example.com"), 0)
+            self.assertEqual(cli("rule-add", "acme", "Invoices", "forward:accounts", "subject=invoice", "body=total: 9"), 0)
+            relay.deliver(mail(subject="March Invoice", attachments=[("inv.txt", "Ref: A1\n")]), "s@x.test", "acme@in.test", "pass")
+            stop, result = threading.Event(), []
+            t = threading.Thread(target=lambda: result.append(main(["run"], env, out=io.StringIO(), err=io.StringIO(), stop=stop)))
+            t.start()
+            try:
+                store = SqliteStore(os.path.join(data, "smpldoc.db"))
+                company = store.find_company_by_slug("acme")
+                deadline = time.time() + 30
+                while time.time() < deadline and not [j for j in store.list_jobs(company.id) if j.status == "done"]:
+                    time.sleep(0.2)
+                job = store.list_jobs(company.id)[0]
+                self.assertEqual(job.status, "done")
+                self.assertEqual([(e.step, e.outcome) for e in store.list_events(company.id, job.id)],
+                                 [("ingest", "ok"), ("extract", "ok"), ("rules", "ok"), ("finish", "ok"), ("deliver", "ok")])
+                store.close()
+            finally:
+                stop.set()
+                t.join(15)
+            self.assertEqual(result, [0])
+            self.assertEqual(len(smtp.messages), 1)
+            _, rcpts, msg = smtp.messages[0]
+            self.assertIn("ap@example.com", rcpts[0])
+            self.assertEqual(msg["Subject"], "March Invoice")
+            names = [p.get_filename() for p in msg.walk() if p.get_filename()]
+            self.assertEqual(names, ["inv.txt"])
 
 
 if __name__ == "__main__":

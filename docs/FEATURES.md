@@ -23,8 +23,10 @@ New features start as a row here, then an issue, then a failing test.
 | aws-credentials | ECS task role, EC2 role (IMDSv2) or env keys | built | `tests/test_aws_creds.py` | Roles preferred |
 | cli-jobs | `jobs` and `job` commands to see results | built | `tests/test_main.py` | Until the portal exists |
 | mail-in-imap | Read a mailbox | planned | | |
-| mail-out | Forward a finished job (SES or SMTP) | planned | | |
-| rules | Route a job by its values | planned | | Port from the private product |
+| mail-out | Send a forward over SMTP (SES, Microsoft 365, Gmail, any) | built | `tests/test_mail_out.py` | TLS required. `ROUTING.md` |
+| forward-targets | Forward only to named addresses an operator created | built | `tests/test_cli_admin.py`, `tests/test_runner.py` | No arbitrary destinations |
+| job-moves | review, hold, close, reopen, reprocess, forward, with the old product's rules | built | `tests/test_workflow.py`, `tests/test_cli_admin.py` | Commands, no portal yet |
+| rules | Route a job by regex on from, to, subject, body, file name and format | built | `tests/test_rules.py`, `tests/test_rules_guard.py` | Time-limited subprocess; conflicts go to a person |
 | extract-bedrock | Read PDFs and images with an AI service | planned | | Optional, operator configured |
 | portal | Web UI for jobs | planned | | Closed by default, OIDC required to bind beyond loopback |
 | oidc | Sign-in through any OIDC provider | planned | | Recipes: Entra, Cognito, Okta, Clerk |

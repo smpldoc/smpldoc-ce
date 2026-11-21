@@ -61,7 +61,7 @@ flowchart LR
   W --> F[Forward or close]
 ```
 
-The trust gate reads one normalised sender verdict (`pass`, `fail`, `unknown`). Each mail adapter
+Rules, forwarding and job moves are described in [ROUTING.md](ROUTING.md). The trust gate reads one normalised sender verdict (`pass`, `fail`, `unknown`). Each mail adapter
 maps its source's checks to that verdict, and anything that is not `pass` is held.
 
 ## Security boundaries
