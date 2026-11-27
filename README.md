@@ -18,6 +18,9 @@ us.
   bucket and the container reads it. A shared mailbox works too. No inbound port is needed for mail.
 - Documents are read by an AI service you choose and pay for in your own account, or not at all.
 - Each email becomes a job you can review, correct, route or forward.
+- Each document becomes a **bundle** in a published, versioned format: the original, its text and
+  where it sits on the page, the field values, and a short card that says what it is. AI agents
+  read bundles through MCP. See [docs/ROADMAP.md](docs/ROADMAP.md).
 - Free and open source under Apache-2.0.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

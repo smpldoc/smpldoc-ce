@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `docs/ROADMAP.md` (Chapter 2: the document bundle) and the draft bundle contract
+  `docs/BUNDLE_FORMAT.md`. Planning only, no behaviour change.
 - Repository scaffold: license, security policy, contribution guide, code of conduct, issue and
   pull request templates, and Dependabot for GitHub Actions.
 - `scripts/check_repo.py` and its tests. It fails the build on an unpinned action or base image,

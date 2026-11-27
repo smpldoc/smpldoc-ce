@@ -27,10 +27,17 @@ New features start as a row here, then an issue, then a failing test.
 | forward-targets | Forward only to named addresses an operator created | built | `tests/test_cli_admin.py`, `tests/test_runner.py` | No arbitrary destinations |
 | job-moves | review, hold, close, reopen, reprocess, forward, with the old product's rules | built | `tests/test_workflow.py`, `tests/test_cli_admin.py` | Commands, no portal yet |
 | rules | Route a job by regex on from, to, subject, body, file name and format | built | `tests/test_rules.py`, `tests/test_rules_guard.py` | Time-limited subprocess; conflicts go to a person |
+| bundle-format | Bundle format v1.0: schemas, example bundle, validator | planned | | `BUNDLE_FORMAT.md`. Chapter 2 step 1 |
+| bundle-write | Write a bundle per document to the `Blob` port | planned | | Storage is the source of truth |
+| extract-pdf-image | Split pages, use PDF text, OCR the rest, with positions | planned | | Local OCR in the image, offline |
+| card | Classify each document and write its quick-read card | planned | | |
+| index | Search cards; `reindex` rebuilds the index from storage | planned | | |
+| bundle-upgrade | Upgrade bundles between format versions with nothing lost | planned | | `docs/bundle-upgrades/` |
+| blob-s3 | Bundles in an S3-compatible bucket | planned | | Reuses the SigV4 signer |
 | extract-bedrock | Read PDFs and images with an AI service | planned | | Optional, operator configured |
 | portal | Web UI for jobs | planned | | Closed by default, OIDC required to bind beyond loopback |
 | oidc | Sign-in through any OIDC provider | planned | | Recipes: Entra, Cognito, Okta, Clerk |
-| mcp | MCP server | planned | | Read only by default, same OIDC tokens |
+| mcp | MCP server: search cards, read bundles | planned | | Read only by default, same OIDC tokens |
 | container-release | Sign, SBOM and publish the image on a version tag | planned | | cosign, CycloneDX |
 | deploy-aws | CloudFormation stack and guide | building | `tests/test_cloudformation.py`, `cfn-lint` | Linted and statically checked, not yet deployed into a real account |
 | deploy-cloudflare | Deploy guide | planned | | |

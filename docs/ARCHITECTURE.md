@@ -2,7 +2,7 @@
 
 **Status: first code.** The core runner, the SQLite store, the file blob, a plain-text extractor and
 the relay-pull mail adapter exist, with tests. See [FEATURES.md](FEATURES.md) for what is built and
-planned, and [RELAY_PROTOCOL.md](RELAY_PROTOCOL.md) for the relay.
+planned, [ROADMAP.md](ROADMAP.md) for what comes next, and [RELAY_PROTOCOL.md](RELAY_PROTOCOL.md) for the relay.
 
 ## The shape
 
