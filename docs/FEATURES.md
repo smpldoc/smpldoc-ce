@@ -17,7 +17,7 @@ New features start as a row here, then an issue, then a failing test.
 | entrypoint | `python -m smpldoc` with run, check-config and add-company | built | `tests/test_main.py` | |
 | health | `/healthz` and `/readyz` on a closed HTTP surface | built | `tests/test_http_exposure.py` | Public routes only |
 | exposure-check | Refuse an open bind with unprotected routes; probe protected routes at start | built | `tests/test_http_exposure.py`, `tests/test_main.py` | Protected routes arrive with the portal |
-| container | Hardened image and example compose file | building | `tests/test_container.py`, CI image job | Not yet signed or published |
+| container | Hardened image and example compose file | building | `tests/test_container.py`, `tests/test_release_gates.py`, CI image job | CI scans it, runs it hardened, restarts it on the same volume and keeps an SBOM. Not yet signed or published |
 | mail-in-s3 | Read mail SES wrote to a bucket | built | `tests/test_s3_inbox.py` | `DEPLOY_AWS.md`. Trusts only SES's own verdict header |
 | aws-signing | SigV4 on the standard library | built | `tests/test_sigv4.py` | AWS's examples, plus a botocore cross-check |
 | aws-credentials | ECS task role, EC2 role (IMDSv2) or env keys | built | `tests/test_aws_creds.py` | Roles preferred |

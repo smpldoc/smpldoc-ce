@@ -51,13 +51,30 @@ jobs:
           docker run --rm -v "$RUNNER_TEMP/image.tar:/image.tar:ro" \
             ghcr.io/aquasecurity/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
             image --input /image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1
+      - name: Make the software bill of materials (CycloneDX)
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/image.tar:/image.tar:ro" -v "$RUNNER_TEMP:/out" \
+            ghcr.io/aquasecurity/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --input /image.tar --format cyclonedx --output /out/smpldoc-ce.sbom.cdx.json
+      - name: Keep the SBOM with the run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smpldoc-ce-sbom
+          path: ${{ runner.temp }}/smpldoc-ce.sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Run it with the hardening flags and check it
         run: |
-          docker run -d --name smpldoc --read-only --cap-drop ALL --security-opt no-new-privileges \
-            --pids-limit 128 --memory 512m --tmpfs /tmp:size=16m,noexec,nosuid -v ci-data:/data \
-            -e SMPLDOC_RELAY_URL=http://127.0.0.1:9 -e SMPLDOC_RELAY_TOKEN=ci-token \
-            -p 127.0.0.1:8080:8080 smpldoc-ce:ci
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          start_smpldoc() {
+            docker run -d --name smpldoc --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --pids-limit 128 --memory 512m --tmpfs /tmp:size=16m,noexec,nosuid -v ci-data:/data \
+              -e SMPLDOC_RELAY_URL=http://127.0.0.1:9 -e SMPLDOC_RELAY_TOKEN=ci-token \
+              -p 127.0.0.1:8080:8080 smpldoc-ce:ci
+            for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && return 0; sleep 1; done
+            docker logs smpldoc
+            return 1
+          }
+          start_smpldoc
           curl -fsS http://127.0.0.1:8080/healthz | grep -q '"status": "ok"'
           test "$(docker exec smpldoc id -u)" = "10001"
           if docker exec smpldoc python -c "open('/app/x','w')" 2>/dev/null; then echo "root filesystem is writable"; exit 1; fi
@@ -67,5 +84,11 @@ jobs:
           docker exec smpldoc python -c "from smpldoc.domain import bundle; [bundle.schema(n) for n in ('manifest', 'text', 'layout', 'fields', 'card')]; print('bundle schemas ok')"
           # The rule guard runs a subprocess: prove it works as a non-root user on a read-only filesystem.
           docker exec smpldoc python -c "from smpldoc.adapters.rules_guard import GuardedEvaluator; from smpldoc.domain.models import Condition, Rule; from smpldoc.domain.rules import Facts; d = GuardedEvaluator(timeout=10)([Rule('r','c','n','hold','',True,(Condition('subject','x'),),'t')], Facts('a','b','x','y',())); assert d.kind == 'move', d; print('rule guard ok in the container')"
+          # Spin down, spin up on the same volume: what was written must still be there.
+          # `jobs ci` exits 0 only if the company created above survived the restart.
+          docker rm -f smpldoc
+          start_smpldoc
+          docker exec smpldoc python -m smpldoc jobs ci
+          curl -fsS http://127.0.0.1:8080/healthz | grep -q '"status": "ok"'
           docker logs smpldoc
           docker rm -f smpldoc
