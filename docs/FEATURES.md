@@ -27,7 +27,7 @@ New features start as a row here, then an issue, then a failing test.
 | forward-targets | Forward only to named addresses an operator created | built | `tests/test_cli_admin.py`, `tests/test_runner.py` | No arbitrary destinations |
 | job-moves | review, hold, close, reopen, reprocess, forward, with the old product's rules | built | `tests/test_workflow.py`, `tests/test_cli_admin.py` | Commands, no portal yet |
 | rules | Route a job by regex on from, to, subject, body, file name and format | built | `tests/test_rules.py`, `tests/test_rules_guard.py` | Time-limited subprocess; conflicts go to a person |
-| bundle-format | Bundle format v1.0: schemas, example bundle, validator | planned | | `BUNDLE_FORMAT.md`. Chapter 2 step 1 |
+| bundle-format | Bundle format v1.0: schemas, example bundle, validator, `bundle-validate` | built | `tests/test_bundle.py`, `tests/test_schema_check.py` | `BUNDLE_FORMAT.md` |
 | bundle-write | Write a bundle per document to the `Blob` port | planned | | Storage is the source of truth |
 | extract-pdf-image | Split pages, use PDF text, OCR the rest, with positions | planned | | Local OCR in the image, offline |
 | card | Classify each document and write its quick-read card | planned | | |

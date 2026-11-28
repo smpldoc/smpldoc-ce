@@ -1,0 +1,44 @@
+{
+  "format": "smpldoc.bundle",
+  "version": "1.0",
+  "bundle_id": "019ac8f0c4000000000000000000b001",
+  "company": "acme",
+  "job_id": "019ac8f0c4000000000000000000a001",
+  "created_at": "2026-11-28T09:30:00Z",
+  "source": {
+    "kind": "mail",
+    "sender": "scanner@example.com",
+    "subject": "Scan from the warehouse",
+    "received_at": "2026-11-28T09:29:58Z"
+  },
+  "original": {
+    "path": "original/invoice-4471.pdf",
+    "content_type": "application/pdf",
+    "size": 891,
+    "sha256": "b61be7610330d33309a751cd0bcd7c0b8d2db61f914aab048019ed4b7ce7189e"
+  },
+  "engines": [
+    {
+      "step": "pdf-text",
+      "name": "example",
+      "version": "1"
+    },
+    {
+      "step": "fields",
+      "name": "rules",
+      "version": "1"
+    },
+    {
+      "step": "card",
+      "name": "rules",
+      "version": "1"
+    }
+  ],
+  "files": {
+    "text.json": "3428fbca0eb91c2afc61c65b5767275ce05d8480860d55c24236c99e198a3656",
+    "layout.json": "b75d46e0bdbab28cd4a91b4a7c83246b06f1af035af2199a2c3301221f8f2dd6",
+    "fields.json": "006f62f98263577725898752ccd8aedba7c46d5e69180e32817479b019ae8934",
+    "card.json": "26349d68e0fce8bd729fa3bcfd6ebc7327b68aaf8eb920f4df2c5b0d17c4b90b"
+  },
+  "upgraded_from": []
+}

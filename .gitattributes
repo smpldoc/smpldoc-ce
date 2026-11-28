@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Bundle fixtures are hashed byte for byte: never change their line endings
+tests/fixtures/bundles/** -text

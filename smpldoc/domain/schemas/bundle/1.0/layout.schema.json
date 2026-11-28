@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "smpldoc.bundle/1.0/layout",
+  "title": "layout",
+  "description": "Blocks, lines, tables and form fields on top of text.json, in reading order.",
+  "$defs": {
+    "block": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^p[1-9][0-9]{0,4}b[1-9][0-9]{0,5}$"
+        },
+        "type": {
+          "enum": [
+            "heading",
+            "paragraph",
+            "list",
+            "table",
+            "field",
+            "signature",
+            "stamp",
+            "image",
+            "other"
+          ]
+        },
+        "box": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "left, top, right, bottom as fractions of the page, origin top left"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^p[1-9][0-9]{0,4}w[1-9][0-9]{0,5}$"
+            },
+            "minItems": 1
+          }
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "row": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "col": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^p[1-9][0-9]{0,4}w[1-9][0-9]{0,5}$"
+                  },
+                  "minItems": 1
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "row",
+              "col",
+              "lines"
+            ]
+          }
+        },
+        "label": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^p[1-9][0-9]{0,4}w[1-9][0-9]{0,5}$"
+          },
+          "description": "for a form field: the words of its label"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "box",
+        "lines"
+      ]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/block"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "page",
+          "blocks"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "pages"
+  ]
+}

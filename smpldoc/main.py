@@ -1,4 +1,4 @@
-"""Entry point: `python -m smpldoc [run | check-config | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID]`.
+"""Entry point: `python -m smpldoc [run | check-config | bundle-validate FOLDER | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID]`.
 Exit codes: 0 ok, 1 command failed, 2 bad usage or settings, 3 refused to start (exposure)."""
 import json
 import os
@@ -9,12 +9,14 @@ import threading
 from datetime import datetime, timezone
 
 from smpldoc.adapters.fs_blob import FileBlob
+from smpldoc.adapters.fs_bundle import BundleReadError, read_bundle_dir
 from smpldoc.adapters.plain_text import PlainTextExtractor
 from smpldoc.adapters.rules_guard import GuardedEvaluator
 from smpldoc.cli_admin import COMMANDS as ADMIN_COMMANDS, clean, run_admin
 from smpldoc.adapters.relay_pull import RelayError
 from smpldoc.adapters.sqlite_store import SqliteStore
 from smpldoc.config import ConfigError, load
+from smpldoc.domain import bundle
 from smpldoc.domain.runner import Runner
 from smpldoc.exposure import ExposureError, check_exposure, probe_host, self_check
 from smpldoc.http_server import Heartbeat, build_server, default_routes
@@ -50,6 +52,25 @@ def _open(config):
     return SqliteStore(os.path.join(config.data_dir, "smpldoc.db"))
 
 
+def _bundle_validate(args, out, err) -> int:
+    if len(args) != 1:
+        print("usage: bundle-validate FOLDER", file=err)
+        return 2
+    try:
+        files = read_bundle_dir(args[0])
+    except BundleReadError as e:
+        print(_clean(str(e)), file=err)
+        return 1
+    problems = bundle.validate(files)
+    for problem in problems:
+        print(_clean(problem), file=err)
+    if problems:
+        return 1
+    kind = json.loads(files["fields.json"])["kind"]
+    print(f"bundle ok: {bundle.FORMAT} {json.loads(files['manifest.json'])['version']}, {kind}", file=out)
+    return 0
+
+
 def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
     env = os.environ if env is None else env
     out, err = out or sys.stdout, err or sys.stderr
@@ -59,6 +80,9 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
     def log(fields):
         err.write(json.dumps({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), **fields}) + "\n")
         err.flush()
+
+    if command == "bundle-validate":
+        return _bundle_validate(args, out, err)
 
     try:
         if command == "add-company":
@@ -116,7 +140,7 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
             print(f"config ok: mail={c.mail_source} bind={c.bind}:{c.port} data={c.data_dir}", file=out)
             return 0
         if command != "run":
-            print("usage: python -m smpldoc [run | check-config | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID | rules | targets | job-action ...]  (see docs/ROUTING.md)", file=err)
+            print("usage: python -m smpldoc [run | check-config | bundle-validate FOLDER | add-company SLUG NAME | jobs COMPANY | job COMPANY JOB_ID | rules | targets | job-action ...]  (see docs/ROUTING.md)", file=err)
             return 2
         config = load(env)
     except ConfigError as e:
