@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Image job in CI: the container is stopped hard and started again on the same volume, and the data it
+  wrote (a company) must still be there. It also writes a CycloneDX software bill of materials and keeps
+  it with the run for 30 days. `tests/test_release_gates.py` keeps these steps from being removed.
 - `docs/ROADMAP.md` (Chapter 2: the document bundle) and the draft bundle contract
   `docs/BUNDLE_FORMAT.md`. Planning only, no behaviour change.
 - Bundle format v1.0: a JSON Schema per bundle file, a fictional example bundle, and a validator that
