@@ -3,6 +3,7 @@ import hashlib
 from collections import deque
 from itertools import count
 
+from smpldoc.domain.bundle import check_store_names
 from smpldoc.domain.models import Inbound
 
 
@@ -20,6 +21,26 @@ class MemoryBlob:
             return self._data[(company_id, key)]
         except KeyError:
             raise KeyError(key) from None
+
+
+class MemoryBundleStore:
+    """Same rules as FileBundleStore, in memory, for tests and trials."""
+
+    def __init__(self):
+        self._bundles = {}
+
+    def put(self, company, bundle_id, files):
+        check_store_names(company, bundle_id, files)
+        self._bundles[(company, bundle_id)] = {path: bytes(data) for path, data in files.items()}
+
+    def get(self, company, bundle_id):
+        try:
+            return dict(self._bundles[(company, bundle_id)])
+        except KeyError:
+            raise KeyError(bundle_id) from None
+
+    def list_ids(self, company):
+        return sorted(i for c, i in self._bundles if c == company)
 
 
 class MemoryMailIn:

@@ -47,7 +47,8 @@ The full contract, including how versions change, is [BUNDLE_FORMAT.md](BUNDLE_F
 
 1. **Format v1.0** (built): `BUNDLE_FORMAT.md`, a JSON Schema per file, an example bundle, a
    validator, and `bundle-validate`.
-2. **Write bundles:** the runner writes a bundle for every document to the `Blob` port.
+2. **Write bundles** (built): the runner writes a bundle for every document it can read to a `BundleStore`
+   (a folder today). Plain-text documents only; PDFs and images are skipped until step 3.
 3. **Read PDFs and images:** split pages, use a PDF's own text where it has one, OCR the rest, and
    fill `text.json` and `layout.json` with positions.
 4. **Cards:** classify each document and write `card.json` from its fields and text.

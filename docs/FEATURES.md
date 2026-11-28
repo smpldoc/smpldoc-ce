@@ -28,7 +28,8 @@ New features start as a row here, then an issue, then a failing test.
 | job-moves | review, hold, close, reopen, reprocess, forward, with the old product's rules | built | `tests/test_workflow.py`, `tests/test_cli_admin.py` | Commands, no portal yet |
 | rules | Route a job by regex on from, to, subject, body, file name and format | built | `tests/test_rules.py`, `tests/test_rules_guard.py` | Time-limited subprocess; conflicts go to a person |
 | bundle-format | Bundle format v1.0: schemas, example bundle, validator, `bundle-validate` | built | `tests/test_bundle.py`, `tests/test_schema_check.py` | `BUNDLE_FORMAT.md` |
-| bundle-write | Write a bundle per document to the `Blob` port | planned | | Storage is the source of truth |
+| bundle-store | A `BundleStore` port: a bundle is written whole or not at all, per company | built | `tests/test_adapters.py` (shared contract: folder and memory) | Folder under the data dir. Bucket comes with `blob-s3` |
+| bundle-write | Write a bundle per document the runner can read | built | `tests/test_bundle_writer.py`, `tests/test_runner.py`, `tests/test_main.py` | Plain text only until `extract-pdf-image`. Every bundle passes the validator. Card is a placeholder until `card` |
 | extract-pdf-image | Split pages, use PDF text, OCR the rest, with positions | planned | | Local OCR in the image, offline |
 | card | Classify each document and write its quick-read card | planned | | |
 | index | Search cards; `reindex` rebuilds the index from storage | planned | | |

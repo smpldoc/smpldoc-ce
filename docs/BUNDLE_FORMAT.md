@@ -1,6 +1,7 @@
 # Bundle format (v1.0 draft)
 
-**Status: v1.0 schemas and validator built; nothing writes bundles yet.** This page is the
+**Status: v1.0 schemas, validator and writer built. smpldoc writes a bundle for each plain-text
+document today; PDFs and images follow (see "What smpldoc writes today").** This page is the
 contract. Once v1.0 is released, it changes only as described under "Versions".
 
 - Schemas: `smpldoc/domain/schemas/bundle/1.0/*.schema.json` (JSON Schema 2020-12).
@@ -129,3 +130,32 @@ writes the new ones, and adds a line to `upgraded_from` in the manifest, so it c
 - A bundle holds only what came in and what was read from it. No secrets, no tokens, no settings.
 - Every file is listed with its hash in the manifest. `bundle validate` fails on a mismatch.
 - Bundles are data. Nothing in a bundle is ever executed.
+
+## What smpldoc writes today
+
+Roadmap step 2. The runner writes one bundle per readable document, between the extract step and the
+rules step. A `bundle` step event records `N written` and, if any were skipped, how many and why.
+
+- **Where:** `<data dir>/bundles/<company slug>/<bundle id>/`, with the paths above. The bundle id is the
+  document's id. Folders are created with mode 700.
+- **Which documents:** attachments. The message text is a document only when nothing is attached.
+  Only `text/plain` can be read now. Anything else (PDF, images, other text types) is skipped with the
+  reason `not-readable-yet`; an empty file is `empty`; text over 256 KiB is `too-large`. A skipped
+  document still takes part in the job exactly as before: only its bundle is missing.
+- **Whole or not at all:** a bundle is written to a temporary folder and moved into place. Writing again
+  (after a crash, or a reprocess) replaces the whole bundle. If the write fails the step is retried like any
+  other, and the job fails after the last try.
+- **Same input, same bytes.** `created_at` and `received_at` are the time the job arrived, in UTC, so a
+  rewritten bundle is byte for byte the same unless the extraction changed.
+- **Text positions:** plain text has no page, so words sit on a fixed grid of 60 lines by 100 columns per
+  page (longer lines are squeezed to fit), with `source: "text"` and confidence 1. The boxes give reading
+  order and place on the grid, not ink on paper.
+- **Layout:** each run of non-blank lines is one `paragraph` block.
+- **Fields:** the `Name: value` pairs the extractor read, in order. Evidence is the words of the value on the
+  first unused line that holds it, with confidence 1. A value that no line matches is kept with no
+  evidence and confidence 0.5. Names are made to fit the format (`2nd_total` becomes `f_2nd_total`).
+- **Card:** a placeholder until cards are built (step 4): kind `document`, category `other`, language `und`,
+  the title from the subject (or the file name), and the page count.
+- **Original:** stored exactly as received, under `original/` with a safe version of its file name.
+
+Check any bundle with `python -m smpldoc bundle-validate FOLDER`.

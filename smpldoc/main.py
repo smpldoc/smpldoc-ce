@@ -9,6 +9,7 @@ import threading
 from datetime import datetime, timezone
 
 from smpldoc.adapters.fs_blob import FileBlob
+from smpldoc.adapters.fs_bundle_store import FileBundleStore
 from smpldoc.adapters.fs_bundle import BundleReadError, read_bundle_dir
 from smpldoc.adapters.plain_text import PlainTextExtractor
 from smpldoc.adapters.rules_guard import GuardedEvaluator
@@ -158,6 +159,7 @@ def main(argv, env=None, *, out=None, err=None, stop=None, extra_routes=()):
     store = _open(config)
     runner = Runner(build_mail_in(config, env), store, FileBlob(os.path.join(config.data_dir, "blobs")),
                     PlainTextExtractor(), batch=config.batch,
+                    bundles=FileBundleStore(os.path.join(config.data_dir, "bundles")),
                     mail_out=build_mail_out(config), evaluate=GuardedEvaluator(), max_forward_bytes=config.max_forward_bytes)
     server = build_server(config.bind, config.port, routes)
     threading.Thread(target=server.serve_forever, daemon=True).start()

@@ -3,10 +3,11 @@ import unittest
 from pathlib import Path
 
 from smpldoc.adapters.fs_blob import FileBlob
-from smpldoc.adapters.memory import MemoryBlob, MemoryMailIn
+from smpldoc.adapters.fs_bundle_store import FileBundleStore
+from smpldoc.adapters.memory import MemoryBlob, MemoryBundleStore, MemoryMailIn
 from smpldoc.adapters.plain_text import PlainTextExtractor
 from smpldoc.adapters.sqlite_store import SqliteStore
-from tests.contracts import BlobContract, ExtractorContract, MailInContract, RAW, StoreContract
+from tests.contracts import BlobContract, BundleStoreContract, ExtractorContract, MailInContract, RAW, StoreContract
 
 
 class SqliteStoreTest(StoreContract, unittest.TestCase):
@@ -66,3 +67,41 @@ class MemoryMailInTest(MailInContract, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MemoryBundleStoreTest(BundleStoreContract, unittest.TestCase):
+    def make_bundles(self):
+        return MemoryBundleStore()
+
+
+class FileBundleStoreTest(BundleStoreContract, unittest.TestCase):
+    def make_bundles(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        return FileBundleStore(self.tmp.name)
+
+    def test_the_layout_on_disk_is_company_then_bundle_then_the_same_paths(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        self.assertEqual((Path(self.tmp.name) / "acme" / self.ID / "original" / "a.txt").read_bytes(), b"hello")
+
+    def test_no_temporary_folders_are_left_behind(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        self.bundles.put("acme", self.ID, {"manifest.json": b"{}"})
+        self.assertEqual([p.name for p in (Path(self.tmp.name) / "acme").iterdir()], [self.ID])
+
+    def test_stray_temporary_folders_are_not_listed_as_bundles(self):
+        (Path(self.tmp.name) / "acme" / ".tmp-x").mkdir(parents=True)
+        self.bundles.put("acme", self.ID, self.FILES)
+        self.assertEqual(self.bundles.list_ids("acme"), [self.ID])
+
+    def test_a_link_inside_a_stored_bundle_is_refused_on_read(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        (Path(self.tmp.name) / "acme" / self.ID / "link").symlink_to("/etc/hostname")
+        with self.assertRaises(KeyError):
+            self.bundles.get("acme", self.ID)
+
+    def test_folders_it_creates_are_private_to_the_service(self):
+        root = Path(self.tmp.name) / "bundles"
+        FileBundleStore(root).put("acme", self.ID, self.FILES)
+        for folder in (root, root / "acme", root / "acme" / self.ID, root / "acme" / self.ID / "original"):
+            self.assertEqual(folder.stat().st_mode & 0o077, 0, folder)

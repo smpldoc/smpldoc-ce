@@ -1,6 +1,6 @@
 """The ports. The core talks to the outside world only through these; adapters implement them.
 Every adapter must pass the shared contract tests in tests/contracts.py."""
-from typing import Optional, Protocol, Sequence
+from typing import Mapping, Optional, Protocol, Sequence
 
 from .models import (Company, Document, Event, FieldValue, Inbound, Job, NewDocument, NewValue, OutgoingMail, Rule, Target)
 
@@ -33,6 +33,21 @@ class Blob(Protocol):
         """Raises KeyError for an unknown key, another company's key or a malformed key."""
 
 
+class BundleStore(Protocol):
+    """Bundles (docs/BUNDLE_FORMAT.md): a set of files under relative paths, kept per company slug.
+    Storage is the source of truth, so a bundle is written whole or not at all."""
+
+    def put(self, company: str, bundle_id: str, files: Mapping[str, bytes]) -> None:
+        """Replace the bundle with these files, all at once. Raises ValueError, writing nothing, for a bad
+        company, id or path, or if manifest.json is missing."""
+
+    def get(self, company: str, bundle_id: str) -> dict[str, bytes]:
+        """Raises KeyError for an unknown bundle, another company's bundle or a malformed name."""
+
+    def list_ids(self, company: str) -> list[str]:
+        """Bundle ids of one company, sorted (so oldest first: ids are time ordered)."""
+
+
 class Extractor(Protocol):
     def extract(self, filename: str, content_type: str, data: bytes) -> list[tuple[str, str]]:
         """Return (field name, value) pairs. Raise ExtractError if the document cannot be read."""
@@ -44,6 +59,7 @@ class Store(Protocol):
 
     def add_company(self, slug: str, name: str) -> Company: ...
     def find_company_by_slug(self, slug: str) -> Optional[Company]: ...
+    def get_company(self, company_id: str) -> Optional[Company]: ...
     def create_job(self, company_id: str, source_id: str, sender: str, subject: str, raw_key: str,
                    status: str, documents: Sequence[NewDocument], recipient: str = "") -> tuple[Job, bool]:
         """Idempotent on (company, source_id): returns (job, created). Job and documents are one

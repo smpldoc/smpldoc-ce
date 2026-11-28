@@ -176,3 +176,25 @@ def _cross_check(docs: dict, errors: _Errors) -> None:
                     errors.add(f"fields.json /fields/{k}/evidence: {wid} is not a word in text.json")
     if card is not None and fields is not None and card["kind"] != fields["kind"]:
         errors.add(f"card.json /kind: {card['kind']} does not match fields.json kind {fields['kind']}")
+
+
+COMPANY = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")  # the company slug, as in manifest.json
+BUNDLE_ID = re.compile(r"^[0-9a-f]{32}$")
+
+
+def check_store_names(company: str, bundle_id: str, files: Mapping[str, bytes]) -> None:
+    """Shared by every BundleStore adapter. Raises ValueError, before anything is written."""
+    if not COMPANY.match(company or ""):
+        raise ValueError("bad company")
+    if not BUNDLE_ID.match(bundle_id or ""):
+        raise ValueError("bad bundle id")
+    if "manifest.json" not in files:
+        raise ValueError("a bundle needs manifest.json")
+    for path, data in files.items():
+        if not safe_path(path):
+            raise ValueError(f"unsafe path {path!r}")
+        if not isinstance(data, (bytes, bytearray)):
+            raise ValueError(f"{path}: not bytes")
+    for path in files:  # a file and a folder with the same name cannot both exist
+        if any(other.startswith(path + "/") for other in files):
+            raise ValueError(f"{path} is both a file and a folder")

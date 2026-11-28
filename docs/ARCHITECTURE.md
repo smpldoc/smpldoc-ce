@@ -41,7 +41,8 @@ same interfaces.
 | `MailOut`: send a message | `ses-send`, `smtp` |
 | `Extractor`: read a document, return field values | `bedrock`, others later |
 | `Store`: jobs, documents, field values, history | `sqlite` (first), Postgres later |
-| `Blob`: original documents | `s3`, `filesystem` |
+| `Blob`: original documents | `s3`, `filesystem` (built) |
+| `BundleStore`: one bundle (a set of files) per document, replaced whole | `filesystem` (built), `s3` |
 
 Every adapter must pass the same shared contract test for its port.
 
@@ -56,7 +57,8 @@ flowchart LR
   I -->|untrusted| H[Held]
   I -->|duplicate| X[Skipped]
   I --> R[Extract]
-  R --> U[Rules]
+  R --> B[Bundle]
+  B --> U[Rules]
   U --> W{{Wait for a person}}
   W --> F[Forward or close]
 ```

@@ -23,7 +23,7 @@ default in place. Run `python -m smpldoc check-config` to validate without start
 | `SMPLDOC_SMTP_PASSWORD_FILE` | none | File holding the SMTP password. Preferred. Or `SMPLDOC_SMTP_PASSWORD`, not both |
 | `SMPLDOC_MAIL_FROM` | none | The address forwards are sent from. It must be allowed by your SMTP service |
 | `SMPLDOC_MAX_FORWARD_BYTES` | `10000000` | The most attachment bytes one forward may carry |
-| `SMPLDOC_DATA_DIR` | `/data` | SQLite file and stored documents. Created with mode 700 |
+| `SMPLDOC_DATA_DIR` | `/data` | SQLite file, stored documents (`blobs/`) and bundles (`bundles/`). Created with mode 700 |
 | `SMPLDOC_POLL_SECONDS` | `30` | Seconds between pulls (1 to 3600). Errors back off up to 8 times longer |
 | `SMPLDOC_BATCH` | `10` | Messages per pull (1 to 100) |
 | `SMPLDOC_BIND` | `127.0.0.1` | Listen address. The image sets `0.0.0.0` because only health checks are served |

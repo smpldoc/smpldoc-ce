@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Bundles are written (roadmap step 2). Each readable document (plain text today) becomes a v1.0 bundle in
+  `<data dir>/bundles/<company>/<bundle id>/`, written whole or not at all, with a `bundle` step event. A new
+  `BundleStore` port with a folder adapter and an in-memory adapter that pass one shared contract test, a
+  pure writer (`domain/bundle_writer.py`), and `Store.get_company`. Every bundle it writes passes the
+  validator, including through the real service in `tests/test_main.py`. PDFs and images are skipped with a
+  recorded reason until they can be read.
 - Image job in CI: the container is stopped hard and started again on the same volume, and the data it
   wrote (a company) must still be there. It also writes a CycloneDX software bill of materials and keeps
   it with the run for 30 days. `tests/test_release_gates.py` keeps these steps from being removed.

@@ -29,6 +29,10 @@ class StoreContract:
         with self.assertRaises(ValueError):
             self.store.add_company("acme", "Again")
 
+    def test_get_company_by_id(self):
+        self.assertEqual(self.store.get_company(self.a.id), self.a)
+        self.assertIsNone(self.store.get_company("nope"))
+
     def test_create_job_is_idempotent_per_company(self):
         job, created = self.job(self.a)
         again, created2 = self.job(self.a)
@@ -219,6 +223,71 @@ class BlobContract:
         for key in ("0" * 64, "../x", "..\\x", "/etc/passwd", "", "a" * 65):
             with self.assertRaises(KeyError, msg=key):
                 self.blob.get("acme", key)
+
+
+class BundleStoreContract:
+    """A bundle is a set of files under relative paths, kept per company. put replaces the whole
+    bundle at once: a reader sees the old files or the new ones, never a mix."""
+    ID = "019ac8f0c4000000000000000000b001"
+    FILES = {"manifest.json": b"{}", "original/a.txt": b"hello", "text.json": b"[]"}
+
+    def make_bundles(self):
+        raise NotImplementedError
+
+    def setUp(self):
+        self.bundles = self.make_bundles()
+
+    def test_round_trip(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        self.assertEqual(self.bundles.get("acme", self.ID), self.FILES)
+        self.assertEqual(self.bundles.list_ids("acme"), [self.ID])
+
+    def test_put_replaces_the_whole_bundle(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        newer = {"manifest.json": b"{\"v\":2}", "card.json": b"{}"}
+        self.bundles.put("acme", self.ID, newer)
+        self.assertEqual(self.bundles.get("acme", self.ID), newer)
+
+    def test_bytes_are_kept_exactly(self):
+        files = {"manifest.json": RAW, "original/a b.bin": bytes(range(256))}
+        self.bundles.put("acme", self.ID, files)
+        self.assertEqual(self.bundles.get("acme", self.ID), files)
+
+    def test_other_company_cannot_read(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        with self.assertRaises(KeyError):
+            self.bundles.get("globex", self.ID)
+        self.assertEqual(self.bundles.list_ids("globex"), [])
+
+    def test_unknown_and_hostile_names_are_not_found(self):
+        for company, bundle_id in (("acme", "0" * 32), ("acme", "../x"), ("acme", ""), ("acme", "A" * 32), ("../x", self.ID), ("", self.ID), ("a/b", self.ID)):
+            with self.assertRaises(KeyError, msg=(company, bundle_id)):
+                self.bundles.get(company, bundle_id)
+        self.assertEqual(self.bundles.list_ids("../x"), [])
+
+    def test_a_refused_put_leaves_nothing_behind(self):
+        bad = ({"manifest.json": b"{}", "../x": b"1"}, {"manifest.json": b"{}", "/abs": b"1"}, {"manifest.json": b"{}", "a/../b": b"1"},
+               {"manifest.json": b"{}", "a//b": b"1"}, {"manifest.json": b"{}", "": b"1"}, {"original/a.txt": b"1"}, {})
+        for files in bad:
+            with self.assertRaises(ValueError, msg=list(files)):
+                self.bundles.put("acme", self.ID, files)
+        for company, bundle_id in (("../x", self.ID), ("", self.ID), ("Acme", self.ID), ("acme", "../x"), ("acme", "short")):
+            with self.assertRaises(ValueError, msg=(company, bundle_id)):
+                self.bundles.put(company, bundle_id, self.FILES)
+        self.assertEqual(self.bundles.list_ids("acme"), [])
+
+    def test_a_refused_replacement_keeps_the_old_bundle(self):
+        self.bundles.put("acme", self.ID, self.FILES)
+        with self.assertRaises(ValueError):
+            self.bundles.put("acme", self.ID, {"manifest.json": b"{}", "../x": b"1"})
+        self.assertEqual(self.bundles.get("acme", self.ID), self.FILES)
+
+    def test_list_ids_is_sorted_and_per_company(self):
+        ids = ["019ac8f0c4000000000000000000b003", "019ac8f0c4000000000000000000b001", "019ac8f0c4000000000000000000b002"]
+        for i in ids:
+            self.bundles.put("acme", i, self.FILES)
+        self.bundles.put("globex", "019ac8f0c4000000000000000000b009", self.FILES)
+        self.assertEqual(self.bundles.list_ids("acme"), sorted(ids))
 
 
 class ExtractorContract:
