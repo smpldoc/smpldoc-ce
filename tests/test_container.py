@@ -23,6 +23,12 @@ class DockerfileTest(unittest.TestCase):
         self.assertNotRegex(DOCKERFILE, r"(?mi)^ADD\s+https?://")
         self.assertNotRegex(DOCKERFILE, r"(curl|wget)[^\n]*\|")
 
+    def test_applies_os_security_fixes_and_installs_nothing_new(self):
+        # The upstream image can lag Debian's security fixes; the scan gate fails on any fixable HIGH.
+        self.assertRegex(DOCKERFILE, r"apt-get update && [^\n]*apt-get upgrade -y")
+        self.assertNotRegex(DOCKERFILE, r"apt-get (?:-\S+ )*install")
+        self.assertIn("rm -rf /var/lib/apt/lists/*", DOCKERFILE)
+
     def test_bakes_in_no_secrets_and_no_public_only_defaults(self):
         self.assertNotRegex(DOCKERFILE, r"(?i)(TOKEN|SECRET|PASSWORD|KEY)\s*=\s*\S")
 
