@@ -10,7 +10,9 @@ All notable changes to this project are documented here. The format follows
 
 - Base image moved from Debian 12 (bookworm) to Debian 13 (trixie), same Python 3.12, pinned by
   digest. The bookworm image carried a fixable high-severity PAM finding that its upstream image had
-  not yet picked up, which failed the image scan.
+  not yet picked up, which failed the image scan. The build now also applies Debian's security fixes
+  to the packages already in the image (no new packages), so a lagging upstream image cannot fail the
+  scan gate or ship a fixable finding.
 
 ### Added
 

@@ -35,6 +35,8 @@ Verify the signature before you run an image. If it fails, do not run it, and te
 ## How we enforce this
 
 - Every GitHub Action is pinned to a full commit SHA, and every base image to a digest.
+- The image build applies Debian's security fixes to the base image's own packages and installs
+  nothing new. A release is therefore identified by its own signed digest, not rebuilt bit for bit.
 - Workflows default to read-only permissions and never use `pull_request_target`.
 - CI fails on a committed secret, an unpinned dependency source, or a download piped to a shell.
 - Pull requests run a vulnerability scan on the image once an image exists.

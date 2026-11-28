@@ -1,9 +1,12 @@
 # smpldoc-ce image. The base is pinned by digest; Dependabot proposes updates. No build tools, no
-# package installs: the app is the standard library plus the files in smpldoc/.
+# package installs: the app is the standard library plus the files in smpldoc/. The build applies
+# Debian's security fixes to the packages already there, because the upstream image can lag them.
 FROM python:3.12-slim-trixie@sha256:191083cdf6c7bda8c76158983163ead5d5cf7b77cf3033e805bb0f5296f51b4b
 
 # Smaller attack surface: nothing here needs pip at run time.
-RUN python -m pip uninstall -y pip setuptools wheel >/dev/null 2>&1 || true \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \
+ && { python -m pip uninstall -y pip setuptools wheel >/dev/null 2>&1 || true; } \
  && groupadd --system --gid 10001 smpldoc \
  && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin smpldoc \
  && mkdir /data && chown 10001:10001 /data && chmod 700 /data
