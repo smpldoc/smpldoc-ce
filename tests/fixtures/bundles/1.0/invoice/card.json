@@ -1,0 +1,21 @@
+{
+  "kind": "invoice",
+  "category": "financial",
+  "title": "Invoice 4471 from Example Supply Co",
+  "parties": [
+    "Example Supply Co",
+    "Acme Ltd"
+  ],
+  "dates": {
+    "issued": "2026-11-28",
+    "due": "2026-12-28"
+  },
+  "totals": {
+    "currency": "USD",
+    "amount_due": "1234.56"
+  },
+  "pages": 1,
+  "language": "en",
+  "summary": "Invoice for 40 pallets of packaging, due 28 December 2026.",
+  "tags": []
+}

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "smpldoc.bundle/1.0/text",
+  "title": "text",
+  "description": "Every piece of text, with its page, position and confidence, in reading order.",
+  "$defs": {
+    "word": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^p[1-9][0-9]{0,4}w[1-9][0-9]{0,5}$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "box": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "description": "left, top, right, bottom as fractions of the page, origin top left"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text",
+        "box",
+        "confidence"
+      ]
+    }
+  },
+  "type": "object",
+  "properties": {
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "width_pt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "height_pt": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "rotation": {
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ]
+          },
+          "source": {
+            "enum": [
+              "pdf-text",
+              "ocr",
+              "text"
+            ]
+          },
+          "words": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/word"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "page",
+          "width_pt",
+          "height_pt",
+          "rotation",
+          "source",
+          "words"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "pages"
+  ]
+}

@@ -10,6 +10,10 @@ All notable changes to this project are documented here. The format follows
 
 - `docs/ROADMAP.md` (Chapter 2: the document bundle) and the draft bundle contract
   `docs/BUNDLE_FORMAT.md`. Planning only, no behaviour change.
+- Bundle format v1.0: a JSON Schema per bundle file, a fictional example bundle, and a validator that
+  checks hashes, sizes, safe paths, unlisted files, word references and the card size, reads newer
+  minor versions leniently and refuses a newer major. A small standard-library JSON Schema checker
+  that refuses any keyword it does not implement. `bundle-validate FOLDER` (refuses links).
 - Repository scaffold: license, security policy, contribution guide, code of conduct, issue and
   pull request templates, and Dependabot for GitHub Actions.
 - `scripts/check_repo.py` and its tests. It fails the build on an unpinned action or base image,

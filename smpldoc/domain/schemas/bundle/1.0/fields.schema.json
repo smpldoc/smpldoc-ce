@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "smpldoc.bundle/1.0/fields",
+  "title": "fields",
+  "description": "Field values, each with the words it was read from.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "enum": [
+        "invoice",
+        "bill",
+        "receipt",
+        "statement",
+        "contract",
+        "delivery-note",
+        "purchase-order",
+        "letter",
+        "form",
+        "document"
+      ]
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^p[1-9][0-9]{0,4}w[1-9][0-9]{0,5}$"
+            }
+          },
+          "engine": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "value",
+          "confidence",
+          "evidence",
+          "engine"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "fields"
+  ]
+}

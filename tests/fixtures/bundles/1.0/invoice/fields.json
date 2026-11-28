@@ -1,0 +1,71 @@
+{
+  "kind": "invoice",
+  "fields": [
+    {
+      "name": "vendor",
+      "value": "Example Supply Co",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w2",
+        "p1w3",
+        "p1w4"
+      ],
+      "engine": "rules"
+    },
+    {
+      "name": "invoice_number",
+      "value": "4471",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w7"
+      ],
+      "engine": "rules"
+    },
+    {
+      "name": "issue_date",
+      "value": "2026-11-28",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w9"
+      ],
+      "engine": "rules"
+    },
+    {
+      "name": "due_date",
+      "value": "2026-12-28",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w11"
+      ],
+      "engine": "rules"
+    },
+    {
+      "name": "customer",
+      "value": "Acme Ltd",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w14",
+        "p1w15"
+      ],
+      "engine": "rules"
+    },
+    {
+      "name": "currency",
+      "value": "USD",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w22"
+      ],
+      "engine": "rules"
+    },
+    {
+      "name": "amount_due",
+      "value": "1234.56",
+      "confidence": 0.99,
+      "evidence": [
+        "p1w23"
+      ],
+      "engine": "rules"
+    }
+  ]
+}
