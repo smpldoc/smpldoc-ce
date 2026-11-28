@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Base image moved from Debian 12 (bookworm) to Debian 13 (trixie), same Python 3.12, pinned by
+  digest. The bookworm image carried a fixable high-severity PAM finding that its upstream image had
+  not yet picked up, which failed the image scan.
+
 ### Added
 
 - `docs/ROADMAP.md` (Chapter 2: the document bundle) and the draft bundle contract
