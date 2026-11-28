@@ -1,9 +1,11 @@
-"""The job pipeline: ingest -> extract -> rules -> finish, then deliver when a forward is queued.
+"""The job pipeline: ingest -> extract -> bundle -> rules -> finish, then deliver when a forward is queued.
 Each step is retried with backoff and writes a step event. Unfinished jobs and queued forwards resume
 after a crash. Nothing here imports a cloud library."""
 import time
+from collections import Counter
 from dataclasses import dataclass
 
+from . import bundle_writer
 from .deliver import build_outgoing
 from .errors import ForwardError, SmpldocError
 from .intake import parse_mail, slug_from_recipient
@@ -30,9 +32,10 @@ class RunSummary:
 
 
 class Runner:
-    def __init__(self, mail_in, store, blob, extractor, *, mail_out=None, evaluate=None, sleep=time.sleep,
+    def __init__(self, mail_in, store, blob, extractor, *, bundles=None, mail_out=None, evaluate=None, sleep=time.sleep,
                  max_attempts=3, base_delay=1.0, batch=10, max_forward_bytes=10_000_000, max_forward_files=32):
         self.mail, self.store, self.blob, self.extractor = mail_in, store, blob, extractor
+        self.bundles = bundles  # optional: with a BundleStore every readable document also becomes a bundle
         self.mail_out, self.evaluate = mail_out, evaluate or rules_mod.evaluate
         self.sleep, self.max_attempts, self.base_delay, self.batch = sleep, max_attempts, base_delay, batch
         self.max_forward_bytes, self.max_forward_files = max_forward_bytes, max_forward_files
@@ -84,6 +87,8 @@ class Runner:
             if job.status == "received":
                 self.store.set_status(job.company_id, job.id, "extracting")
             values = self._retry(job, "extract", lambda: self._extract(job))
+            if self.bundles is not None:
+                self._retry(job, "bundle", lambda: self._bundle(job, values), detail=lambda note: note)
             decision = self._decide(job)
             status = "ready" if decision.kind == "conflict" else STATUS_FOR.get(decision.action, "ready")
             forward = decision.target if decision.kind == "move" and decision.action == "forward" else ""
@@ -104,6 +109,34 @@ class Runner:
             data = self.blob.get(job.company_id, doc.blob_key)
             values += [NewValue(doc.id, name, value) for name, value in self.extractor.extract(doc.filename, doc.content_type, data)]
         return values
+
+    def _bundle(self, job, values) -> str:
+        """One bundle per document (docs/BUNDLE_FORMAT.md). Attachments are the documents; the message text
+        is one only when nothing is attached. The id is the document's id, so writing again after a crash
+        or a reprocess replaces the same bundle. Returns a note for the step event: counts and codes only."""
+        company = self.store.get_company(job.company_id)
+        if company is None:
+            raise StepFailed("UnknownCompany")
+        docs = self.store.list_documents(job.company_id, job.id)
+        chosen = [d for d in docs if d.kind != "body"] or docs
+        pairs = {}
+        for v in values:
+            pairs.setdefault(v.document_id, []).append((v.name, v.value))
+        written, skipped = 0, Counter()
+        for doc in chosen:
+            data = self.blob.get(job.company_id, doc.blob_key)
+            files = bundle_writer.build(company=company.slug, bundle_id=doc.id, job_id=job.id, created_at=job.created_at,
+                                        sender=job.sender, subject=job.subject, filename=doc.filename,
+                                        content_type=doc.content_type, data=data, pairs=pairs.get(doc.id, []))
+            if files is None:
+                skipped[bundle_writer.skip_reason(doc.content_type, data)] += 1
+                continue
+            self.bundles.put(company.slug, doc.id, files)
+            written += 1
+        note = f"{written} written"
+        if skipped:
+            note += f", {sum(skipped.values())} skipped ({', '.join(sorted(skipped))})"
+        return note
 
     def _decide(self, job):
         """Evaluate the company's rules. A rule problem never loses the job: it waits for a person."""

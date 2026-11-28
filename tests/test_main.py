@@ -209,6 +209,34 @@ class EndToEndTest(unittest.TestCase):
             self.assertNotIn("Invoice", err.getvalue())  # no document text in logs
 
 
+class BundleEndToEndTest(unittest.TestCase):
+    def test_a_real_run_writes_a_bundle_the_operators_validator_accepts(self):
+        relay = FakeRelay()
+        self.addCleanup(relay.close)
+        with tempfile.TemporaryDirectory() as d:
+            data, port = os.path.join(d, "data"), free_port()
+            env = {"SMPLDOC_DATA_DIR": data, "SMPLDOC_RELAY_URL": relay.url, "SMPLDOC_RELAY_TOKEN": "tok",
+                   "SMPLDOC_POLL_SECONDS": "1", "SMPLDOC_PORT": str(port)}
+            self.assertEqual(main(["add-company", "acme", "Acme"], env, out=io.StringIO(), err=io.StringIO()), 0)
+            relay.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]), "s@x.test", "acme@in.test", "pass")
+            stop, result = threading.Event(), []
+            t = threading.Thread(target=lambda: result.append(main(["run"], env, out=io.StringIO(), err=io.StringIO(), stop=stop)))
+            t.start()
+            try:
+                folder = os.path.join(data, "bundles", "acme")
+                deadline = time.time() + 20
+                while time.time() < deadline and not (os.path.isdir(folder) and os.listdir(folder)):
+                    time.sleep(0.1)
+                (bundle_id,) = [n for n in os.listdir(folder) if not n.startswith(".")]
+                out, err = io.StringIO(), io.StringIO()
+                self.assertEqual(main(["bundle-validate", os.path.join(folder, bundle_id)], {}, out=out, err=err), 0, err.getvalue())
+            finally:
+                stop.set()
+                t.join(15)
+            self.assertEqual(result, [0])
+            self.assertEqual(stat.S_IMODE(os.stat(os.path.join(data, "bundles")).st_mode) & 0o077, 0)
+
+
 class ForwardEndToEndTest(unittest.TestCase):
     def test_a_rule_forwards_real_mail_through_the_real_service(self):
         relay, smtp = FakeRelay(), FakeSmtp()
@@ -236,7 +264,7 @@ class ForwardEndToEndTest(unittest.TestCase):
                 job = store.list_jobs(company.id)[0]
                 self.assertEqual(job.status, "done")
                 self.assertEqual([(e.step, e.outcome) for e in store.list_events(company.id, job.id)],
-                                 [("ingest", "ok"), ("extract", "ok"), ("rules", "ok"), ("finish", "ok"), ("deliver", "ok")])
+                                 [("ingest", "ok"), ("extract", "ok"), ("bundle", "ok"), ("rules", "ok"), ("finish", "ok"), ("deliver", "ok")])
                 store.close()
             finally:
                 stop.set()

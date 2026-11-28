@@ -92,6 +92,10 @@ class SqliteStore:
         row = self.db.execute("SELECT id, slug, name FROM company WHERE slug = ?", (slug,)).fetchone()
         return Company(*row) if row else None
 
+    def get_company(self, company_id):
+        row = self.db.execute("SELECT id, slug, name FROM company WHERE id = ?", (company_id,)).fetchone()
+        return Company(*row) if row else None
+
     def create_job(self, company_id, source_id, sender, subject, raw_key, status, documents, recipient=""):
         with self._tx():
             row = self.db.execute(f"SELECT {JOB} FROM job WHERE company_id = ? AND source_id = ?", (company_id, source_id)).fetchone()

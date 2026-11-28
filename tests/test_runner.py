@@ -1,9 +1,12 @@
+import hashlib
+import json
 import unittest
 from email.message import EmailMessage
 
-from smpldoc.adapters.memory import MemoryBlob, MemoryMailIn, MemoryMailOut
+from smpldoc.adapters.memory import MemoryBlob, MemoryBundleStore, MemoryMailIn, MemoryMailOut
 from smpldoc.adapters.plain_text import PlainTextExtractor
 from smpldoc.adapters.sqlite_store import SqliteStore
+from smpldoc.domain import bundle
 from smpldoc.domain.errors import ExtractError, SendError
 from smpldoc.domain.models import Condition
 from smpldoc.domain.intake import safe_filename, slug_from_recipient
@@ -361,6 +364,142 @@ class Forwarding(RunnerCase):
         self.assertTrue(self.store.move_job(self.acme.id, job.id, ["ready"], "ready", forward_target="accounts"))
         self.runner(mail_out=self.out).run_once()
         self.assertEqual((self.only_job().status, len(self.out.sent)), ("done", 1))
+
+
+
+class FlakyBundles(MemoryBundleStore):
+    def __init__(self, fail_times):
+        super().__init__()
+        self.left = fail_times
+
+    def put(self, company, bundle_id, files):
+        if self.left:
+            self.left -= 1
+            raise OSError("disk full while writing secret document text")
+        super().put(company, bundle_id, files)
+
+
+def pdf_mail(body="See attached.\n"):
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"], m["Message-ID"] = "s@x.test", "acme@in.test", "Scan", "<pdf@x.test>"
+    m.set_content(body)
+    m.add_attachment(b"%PDF-1.4 fake", maintype="application", subtype="pdf", filename="scan.pdf")
+    return m.as_bytes()
+
+
+class Bundles(RunnerCase):
+    def setUp(self):
+        super().setUp()
+        self.bundles = MemoryBundleStore()
+
+    def run_bundled(self, **kw):
+        return self.runner(bundles=self.bundles, **kw).run_once()
+
+    def test_each_attachment_gets_a_valid_bundle_and_the_message_text_does_not(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n"), ("more.txt", "Ref: B2\n")]))
+        self.run_bundled()
+        job = self.only_job()
+        docs = {d.filename: d for d in self.store.list_documents(self.acme.id, job.id)}
+        self.assertEqual(self.bundles.list_ids("acme"), sorted([docs["notes.txt"].id, docs["more.txt"].id]))
+        for name in ("notes.txt", "more.txt"):
+            files = self.bundles.get("acme", docs[name].id)
+            self.assertEqual(bundle.validate(files), [], name)
+            manifest = json.loads(files["manifest.json"])
+            self.assertEqual((manifest["company"], manifest["job_id"], manifest["bundle_id"]), ("acme", job.id, docs[name].id))
+            self.assertEqual(manifest["source"]["sender"], "s@x.test")
+            self.assertEqual(manifest["original"]["sha256"], hashlib.sha256(self.blob.get(self.acme.id, docs[name].blob_key)).hexdigest())
+
+    def test_the_fields_in_the_bundle_are_the_values_the_job_has(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\nTotal: 9.50\n")]))
+        self.run_bundled()
+        job = self.only_job()
+        notes = next(d for d in self.store.list_documents(self.acme.id, job.id) if d.filename == "notes.txt")
+        fields = json.loads(self.bundles.get("acme", notes.id)["fields.json"])["fields"]
+        self.assertEqual([(f["name"], f["value"]) for f in fields], [("ref", "A1"), ("total", "9.50")])
+        stored = {(v.name, v.value) for v in self.store.list_field_values(self.acme.id, job.id) if v.document_id == notes.id}
+        self.assertEqual({(f["name"], f["value"]) for f in fields}, stored)
+
+    def test_when_nothing_is_attached_the_message_text_is_the_document(self):
+        self.deliver(mail())
+        self.run_bundled()
+        job = self.only_job()
+        (body,) = self.store.list_documents(self.acme.id, job.id)
+        self.assertEqual(self.bundles.list_ids("acme"), [body.id])
+        self.assertEqual(bundle.validate(self.bundles.get("acme", body.id)), [])
+
+    def test_the_bundle_step_is_recorded_between_extract_and_rules(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.run_bundled()
+        self.assertEqual(self.steps(self.only_job()), [("ingest", "ok"), ("extract", "ok"), ("bundle", "ok"), ("rules", "ok"), ("finish", "ok")])
+        (event,) = [e for e in self.store.list_events(self.acme.id, self.only_job().id) if e.step == "bundle"]
+        self.assertEqual(event.detail, "1 written")
+
+    def test_what_cannot_be_read_yet_is_skipped_and_the_job_still_finishes(self):
+        self.deliver(pdf_mail())
+        self.run_bundled()
+        job = self.only_job()
+        self.assertEqual(job.status, "ready")
+        self.assertEqual(self.bundles.list_ids("acme"), [])
+        (event,) = [e for e in self.store.list_events(self.acme.id, job.id) if e.step == "bundle"]
+        self.assertEqual((event.outcome, event.detail), ("ok", "0 written, 1 skipped (not-readable-yet)"))
+
+    def test_without_a_bundle_store_nothing_changes(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.runner().run_once()
+        self.assertNotIn("bundle", [step for step, _ in self.steps(self.only_job())])
+
+    def test_a_write_that_fails_is_retried_and_leaves_one_bundle(self):
+        self.bundles = FlakyBundles(fail_times=1)
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.run_bundled()
+        job = self.only_job()
+        self.assertEqual(job.status, "ready")
+        self.assertIn(("bundle", "retry"), self.steps(job))
+        self.assertEqual(len(self.bundles.list_ids("acme")), 1)
+        self.assertEqual(self.sleeps, [1.0])
+
+    def test_a_write_that_keeps_failing_fails_the_job_without_storing_document_text(self):
+        self.bundles = FlakyBundles(fail_times=99)
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        summary = self.run_bundled()
+        job = self.only_job()
+        self.assertEqual((job.status, job.error, summary.failed), ("failed", "OSError", 1))
+        self.assertEqual(self.store.list_field_values(self.acme.id, job.id), [])
+        events = self.store.list_events(self.acme.id, job.id)
+        self.assertNotIn("secret", " ".join(e.detail for e in events))
+        self.assertNotIn("secret", job.error)
+
+    def test_running_again_after_a_crash_rewrites_the_same_bundle(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.run_bundled()
+        job = self.only_job()
+        notes = next(d for d in self.store.list_documents(self.acme.id, job.id) if d.filename == "notes.txt")
+        first = self.bundles.get("acme", notes.id)
+        self.store.set_status(self.acme.id, job.id, "extracting")  # as if it died before finishing
+        self.run_bundled()
+        self.assertEqual(self.bundles.get("acme", notes.id), first)
+        self.assertEqual(len(self.bundles.list_ids("acme")), 1)
+
+    def test_a_duplicate_message_writes_no_second_bundle(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.run_bundled()
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.run_bundled()
+        self.assertEqual(len(self.bundles.list_ids("acme")), 1)
+
+    def test_companies_keep_their_bundles_apart(self):
+        globex = self.store.add_company("globex", "Globex")
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]))
+        self.deliver(mail(message_id="<g@x.test>", attachments=[("notes.txt", "Ref: G1\n")]), recipient="globex@in.test")
+        self.run_bundled()
+        self.assertEqual(len(self.bundles.list_ids("acme")), 1)
+        self.assertEqual(len(self.bundles.list_ids("globex")), 1)
+        self.assertEqual(self.store.list_jobs(globex.id)[0].status, "ready")
+
+    def test_held_mail_gets_no_bundle(self):
+        self.deliver(mail(attachments=[("notes.txt", "Ref: A1\n")]), verdict="fail")
+        self.run_bundled()
+        self.assertEqual(self.bundles.list_ids("acme"), [])
 
 
 if __name__ == "__main__":
